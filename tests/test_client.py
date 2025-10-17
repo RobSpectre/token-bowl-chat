@@ -27,16 +27,16 @@ def test_register_success(httpx_mock: HTTPXMock, client: TokenBowlClient) -> Non
         method="POST",
         url="http://test.example.com/register",
         json={
-            "username": "alice",
+            "username": "user_abc123def456",
             "api_key": "test-key-123",
             "webhook_url": None,
         },
         status_code=201,
     )
 
-    response = client.register(username="alice")
+    response = client.register()
 
-    assert response.username == "alice"
+    assert response.username.startswith("user_")
     assert response.api_key == "test-key-123"
     assert response.webhook_url is None
 
@@ -48,21 +48,21 @@ def test_register_with_webhook(httpx_mock: HTTPXMock, client: TokenBowlClient) -
         method="POST",
         url="http://test.example.com/register",
         json={
-            "username": "bob",
+            "username": "user_xyz789abc123",
             "api_key": "test-key-456",
             "webhook_url": webhook_url,
         },
         status_code=201,
     )
 
-    response = client.register(username="bob", webhook_url=webhook_url)
+    response = client.register(webhook_url=webhook_url)
 
-    assert response.username == "bob"
+    assert response.username.startswith("user_")
     assert response.webhook_url == webhook_url
 
 
 def test_register_conflict(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
-    """Test registration with existing username."""
+    """Test registration with existing username (rare but possible with UUID collision)."""
     httpx_mock.add_response(
         method="POST",
         url="http://test.example.com/register",
@@ -71,7 +71,7 @@ def test_register_conflict(httpx_mock: HTTPXMock, client: TokenBowlClient) -> No
     )
 
     with pytest.raises(ConflictError):
-        client.register(username="alice")
+        client.register()
 
 
 def test_send_message_room(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:

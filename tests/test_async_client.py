@@ -25,16 +25,16 @@ async def test_register_success(
         method="POST",
         url="http://test.example.com/register",
         json={
-            "username": "alice",
+            "username": "user_abc123def456",
             "api_key": "test-key-123",
             "webhook_url": None,
         },
         status_code=201,
     )
 
-    response = await async_client.register(username="alice")
+    response = await async_client.register()
 
-    assert response.username == "alice"
+    assert response.username.startswith("user_")
     assert response.api_key == "test-key-123"
 
 
