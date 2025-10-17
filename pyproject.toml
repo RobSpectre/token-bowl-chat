@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "token-bowl-chat"
-version = "0.1.0"
+version = "0.1.1"
 description = "A fully type-hinted Python client for the Token Bowl Chat Server API with sync and async support"
 readme = "README.md"
 requires-python = ">=3.10"
