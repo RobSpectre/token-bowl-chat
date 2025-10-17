@@ -1,8 +1,77 @@
 # PyPI Release Guide
 
-This guide explains how to build and publish Token Bowl Chat to PyPI using `uv`.
+This guide explains how to build and publish Token Bowl Chat to PyPI. There are two methods:
 
-## Prerequisites
+1. **Automated (Recommended)**: GitHub Actions workflow automatically publishes on release
+2. **Manual**: Build and publish locally using `uv`
+
+## Method 1: Automated Publishing (Recommended)
+
+### Setup (One-Time)
+
+The repository includes a GitHub Actions workflow that automatically publishes to PyPI when you create a GitHub release.
+
+#### Enable PyPI Trusted Publishing
+
+1. **Go to PyPI**:
+   - Visit https://pypi.org/manage/account/publishing/
+
+2. **Add Trusted Publisher**:
+   - Click "Add a new pending publisher"
+   - Fill in the form:
+     - **PyPI Project Name**: `token-bowl-chat`
+     - **Owner**: `RobSpectre` (your GitHub username)
+     - **Repository name**: `token-bowl-chat`
+     - **Workflow name**: `publish.yml`
+     - **Environment name**: `pypi`
+   - Click "Add"
+
+3. **Add TestPyPI Publisher** (optional but recommended):
+   - Visit https://test.pypi.org/manage/account/publishing/
+   - Add another publisher with the same details but environment name: `testpypi`
+
+### Release Process
+
+1. **Update version**:
+   ```bash
+   # Edit pyproject.toml and update version number
+   version = "0.2.0"
+   ```
+
+2. **Update CHANGELOG.md** with release notes
+
+3. **Commit changes**:
+   ```bash
+   git add pyproject.toml CHANGELOG.md
+   git commit -m "Bump version to 0.2.0"
+   git push
+   ```
+
+4. **Create and push tag**:
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+5. **Create GitHub Release**:
+   - Go to https://github.com/RobSpectre/token-bowl-chat/releases/new
+   - Select the tag you just created (v0.2.0)
+   - Add release title: "v0.2.0"
+   - Add release notes from CHANGELOG.md
+   - Click "Publish release"
+
+6. **Wait for workflow**:
+   - GitHub Actions will automatically:
+     - Build the package
+     - Publish to TestPyPI
+     - Publish to PyPI
+   - Check progress at: https://github.com/RobSpectre/token-bowl-chat/actions
+
+That's it! The package will be live on PyPI within minutes.
+
+## Method 2: Manual Publishing
+
+### Prerequisites
 
 1. **Install uv**:
    ```bash
@@ -30,9 +99,9 @@ This guide explains how to build and publish Token Bowl Chat to PyPI using `uv`.
    export UV_PUBLISH_TOKEN=pypi-AgEIcHlwaS5vcmc...
    ```
 
-## Pre-Release Checklist
+### Pre-Release Checklist
 
-Before building and uploading, ensure:
+Before building and uploading manually, ensure:
 
 - [ ] All tests pass: `pytest`
 - [ ] Code quality checks pass: `ruff check .`
@@ -43,7 +112,7 @@ Before building and uploading, ensure:
 - [ ] All changes committed to git
 - [ ] Git tag created: `git tag v0.1.0`
 
-## Building the Distribution
+### Building the Distribution
 
 1. **Clean previous builds**:
    ```bash
@@ -68,7 +137,7 @@ Before building and uploading, ensure:
    unzip -l dist/token_bowl_chat-0.1.0-py3-none-any.whl
    ```
 
-## Testing the Package Locally
+### Testing the Package Locally
 
 Before uploading to PyPI, test the package locally:
 
@@ -88,7 +157,7 @@ deactivate
 rm -rf test-env
 ```
 
-## Uploading to Test PyPI (Recommended First)
+### Uploading to Test PyPI (Recommended First)
 
 Test PyPI is a separate instance of PyPI for testing:
 
@@ -113,7 +182,7 @@ Test PyPI is a separate instance of PyPI for testing:
 
    Note: `--extra-index-url` is needed because dependencies come from regular PyPI.
 
-## Uploading to PyPI (Production)
+### Uploading to PyPI (Production)
 
 Once testing is complete:
 
