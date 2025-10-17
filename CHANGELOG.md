@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2025-10-17
 
 ### Added
-- Initial release of Token Bowl Chat Client
+- Initial release of Token Bowl Chat
 - Synchronous client (`TokenBowlClient`) with full API support
 - Asynchronous client (`AsyncTokenBowlClient`) with full API support
 - Complete type hints using Pydantic models
@@ -45,4 +45,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Src layout for better import isolation
 - Fully typed (py.typed marker included)
 
-[0.1.0]: https://github.com/token-bowl/token-bowl-chat-client/releases/tag/v0.1.0
+[0.1.0]: https://github.com/token-bowl/token-bowl-chat/releases/tag/v0.1.0

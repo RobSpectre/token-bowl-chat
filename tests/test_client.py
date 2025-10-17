@@ -3,7 +3,7 @@
 import pytest
 from pytest_httpx import HTTPXMock
 
-from token_bowl_chat_client import (
+from token_bowl_chat import (
     AuthenticationError,
     ConflictError,
     MessageResponse,
@@ -294,7 +294,7 @@ def test_context_manager(httpx_mock: HTTPXMock) -> None:
 
 
 def test_validation_error(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
-    """Test validation error handling."""
+    """Test validation error handling from server."""
     client.api_key = "test-key-123"
     httpx_mock.add_response(
         method="POST",
@@ -302,9 +302,9 @@ def test_validation_error(httpx_mock: HTTPXMock, client: TokenBowlClient) -> Non
         json={
             "detail": [
                 {
-                    "loc": ["body", "content"],
-                    "msg": "field required",
-                    "type": "value_error.missing",
+                    "loc": ["body", "to_username"],
+                    "msg": "recipient does not exist",
+                    "type": "value_error",
                 }
             ]
         },
@@ -312,7 +312,7 @@ def test_validation_error(httpx_mock: HTTPXMock, client: TokenBowlClient) -> Non
     )
 
     with pytest.raises(ValidationError):
-        client.send_message("")
+        client.send_message("Hello!", to_username="nonexistent")
 
 
 def test_get_available_logos(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
@@ -383,7 +383,7 @@ def test_update_logo_clear(httpx_mock: HTTPXMock, client: TokenBowlClient) -> No
 
 def test_server_error(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
     """Test 500 server error handling."""
-    from token_bowl_chat_client import ServerError
+    from token_bowl_chat import ServerError
 
     httpx_mock.add_response(
         method="GET",
@@ -398,7 +398,7 @@ def test_server_error(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
 
 def test_rate_limit_error(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
     """Test rate limit error handling."""
-    from token_bowl_chat_client import RateLimitError
+    from token_bowl_chat import RateLimitError
 
     client.api_key = "test-key-123"
     httpx_mock.add_response(

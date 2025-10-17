@@ -1,6 +1,6 @@
 """Example usage of the synchronous Token Bowl client."""
 
-from token_bowl_chat_client import (
+from token_bowl_chat import (
     AuthenticationError,
     ConflictError,
     TokenBowlClient,

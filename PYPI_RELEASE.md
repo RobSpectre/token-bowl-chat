@@ -1,6 +1,6 @@
 # PyPI Release Guide
 
-This guide explains how to build and publish the Token Bowl Chat Client to PyPI using `uv`.
+This guide explains how to build and publish Token Bowl Chat to PyPI using `uv`.
 
 ## Prerequisites
 
@@ -56,16 +56,16 @@ Before building and uploading, ensure:
    ```
 
    This creates two files in the `dist/` directory:
-   - `token_bowl_chat_client-0.1.0.tar.gz` (source distribution)
-   - `token_bowl_chat_client-0.1.0-py3-none-any.whl` (wheel distribution)
+   - `token_bowl_chat-0.1.0.tar.gz` (source distribution)
+   - `token_bowl_chat-0.1.0-py3-none-any.whl` (wheel distribution)
 
 3. **Verify the build**:
    ```bash
    # Check what files are included in source dist
-   tar -tzf dist/token_bowl_chat_client-0.1.0.tar.gz
+   tar -tzf dist/token_bowl_chat-0.1.0.tar.gz
 
    # Check what files are in the wheel
-   unzip -l dist/token_bowl_chat_client-0.1.0-py3-none-any.whl
+   unzip -l dist/token_bowl_chat-0.1.0-py3-none-any.whl
    ```
 
 ## Testing the Package Locally
@@ -78,10 +78,10 @@ uv venv test-env
 source test-env/bin/activate  # On Windows: test-env\Scripts\activate
 
 # Install from the wheel
-uv pip install dist/token_bowl_chat_client-0.1.0-py3-none-any.whl
+uv pip install dist/token_bowl_chat-0.1.0-py3-none-any.whl
 
 # Test import
-python -c "from token_bowl_chat_client import TokenBowlClient; print('Success!')"
+python -c "from token_bowl_chat import TokenBowlClient; print('Success!')"
 
 # Deactivate and remove test environment
 deactivate
@@ -108,7 +108,7 @@ Test PyPI is a separate instance of PyPI for testing:
 
 3. **Test installation from Test PyPI**:
    ```bash
-   uv pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ token-bowl-chat-client
+   uv pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ token-bowl-chat
    ```
 
    Note: `--extra-index-url` is needed because dependencies come from regular PyPI.
@@ -128,13 +128,13 @@ Once testing is complete:
    ```
 
 2. **Verify upload**:
-   - Check https://pypi.org/project/token-bowl-chat-client/
+   - Check https://pypi.org/project/token-bowl-chat/
 
 3. **Test installation**:
    ```bash
-   uv pip install token-bowl-chat-client
+   uv pip install token-bowl-chat
    # Or with pip:
-   pip install token-bowl-chat-client
+   pip install token-bowl-chat
    ```
 
 ## Post-Release Steps
@@ -164,7 +164,7 @@ If you get "File already exists" error, you cannot overwrite a version. You must
 Check `MANIFEST.in` or hatchling configuration in `pyproject.toml`:
 ```toml
 [tool.hatch.build.targets.wheel]
-packages = ["src/token_bowl_chat_client"]
+packages = ["src/token_bowl_chat"]
 ```
 
 ### Upload forbidden

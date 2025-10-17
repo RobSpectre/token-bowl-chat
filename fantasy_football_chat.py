@@ -1,6 +1,6 @@
 """Script to create three users and have them chat about fantasy football."""
 
-from token_bowl_chat_client import TokenBowlClient, ConflictError
+from token_bowl_chat import TokenBowlClient, ConflictError
 
 # Server configuration
 BASE_URL = "http://0.0.0.0:8000"

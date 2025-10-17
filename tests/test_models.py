@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from token_bowl_chat_client.models import (
+from token_bowl_chat.models import (
     MessageResponse,
     MessageType,
     SendMessageRequest,

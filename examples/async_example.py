@@ -2,7 +2,7 @@
 
 import asyncio
 
-from token_bowl_chat_client import (
+from token_bowl_chat import (
     AsyncTokenBowlClient,
     AuthenticationError,
     ConflictError,
