@@ -313,3 +313,125 @@ def test_validation_error(httpx_mock: HTTPXMock, client: TokenBowlClient) -> Non
 
     with pytest.raises(ValidationError):
         client.send_message("")
+
+
+def test_get_available_logos(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
+    """Test getting available logos."""
+    client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/logos",
+        json=["claude-color.png", "openai.png", "gemini-color.png"],
+    )
+
+    logos = client.get_available_logos()
+
+    assert len(logos) == 3
+    assert "claude-color.png" in logos
+    assert "openai.png" in logos
+
+
+def test_register_with_logo(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
+    """Test registration with logo."""
+    httpx_mock.add_response(
+        method="POST",
+        url="http://test.example.com/register",
+        json={
+            "username": "alice",
+            "api_key": "test-key-123",
+            "webhook_url": None,
+            "logo": "claude-color.png",
+        },
+        status_code=201,
+    )
+
+    response = client.register(username="alice", logo="claude-color.png")
+
+    assert response.username == "alice"
+    assert response.logo == "claude-color.png"
+
+
+def test_update_logo(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
+    """Test updating user logo."""
+    client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="PATCH",
+        url="http://test.example.com/users/me/logo",
+        json={"message": "Logo updated successfully", "logo": "openai.png"},
+    )
+
+    result = client.update_my_logo(logo="openai.png")
+
+    assert result["message"] == "Logo updated successfully"
+    assert result["logo"] == "openai.png"
+
+
+def test_update_logo_clear(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
+    """Test clearing user logo."""
+    client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="PATCH",
+        url="http://test.example.com/users/me/logo",
+        json={"message": "Logo cleared successfully", "logo": None},
+    )
+
+    result = client.update_my_logo(logo=None)
+
+    assert result["message"] == "Logo cleared successfully"
+    assert result["logo"] is None
+
+
+def test_server_error(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
+    """Test 500 server error handling."""
+    from token_bowl_chat_client import ServerError
+
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/health",
+        json={"error": "Internal server error"},
+        status_code=500,
+    )
+
+    with pytest.raises(ServerError):
+        client.health_check()
+
+
+def test_rate_limit_error(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
+    """Test rate limit error handling."""
+    from token_bowl_chat_client import RateLimitError
+
+    client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="POST",
+        url="http://test.example.com/messages",
+        json={"error": "Rate limit exceeded"},
+        status_code=429,
+    )
+
+    with pytest.raises(RateLimitError):
+        client.send_message("Test message")
+
+
+def test_get_messages_with_since(
+    httpx_mock: HTTPXMock, client: TokenBowlClient
+) -> None:
+    """Test getting messages with since parameter."""
+    client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/messages?limit=50&offset=0&since=2025-10-16T12:00:00Z",
+        json={
+            "messages": [],
+            "pagination": {
+                "total": 0,
+                "offset": 0,
+                "limit": 50,
+                "has_more": False,
+            },
+        },
+    )
+
+    response = client.get_messages(since="2025-10-16T12:00:00Z")
+
+    assert len(response.messages) == 0
+    assert response.pagination.total == 0

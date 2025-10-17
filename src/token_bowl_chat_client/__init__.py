@@ -20,6 +20,7 @@ from .models import (
     PaginatedMessagesResponse,
     PaginationMetadata,
     SendMessageRequest,
+    UpdateLogoRequest,
     UserRegistration,
     UserRegistrationResponse,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "PaginatedMessagesResponse",
     "PaginationMetadata",
     "SendMessageRequest",
+    "UpdateLogoRequest",
     "UserRegistration",
     "UserRegistrationResponse",
     "HTTPValidationError",

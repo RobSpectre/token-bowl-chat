@@ -151,3 +151,103 @@ async def test_no_auth_error(async_client: AsyncTokenBowlClient) -> None:
     """Test error when authentication required but not provided."""
     with pytest.raises(AuthenticationError, match="API key required"):
         await async_client.send_message("Hello!")
+
+
+@pytest.mark.asyncio
+async def test_register_with_logo(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test async registration with logo."""
+    httpx_mock.add_response(
+        method="POST",
+        url="http://test.example.com/register",
+        json={
+            "username": "alice",
+            "api_key": "test-key-123",
+            "webhook_url": None,
+            "logo": "claude-color.png",
+        },
+        status_code=201,
+    )
+
+    response = await async_client.register(username="alice", logo="claude-color.png")
+
+    assert response.username == "alice"
+    assert response.logo == "claude-color.png"
+
+
+@pytest.mark.asyncio
+async def test_get_available_logos(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test getting available logos asynchronously."""
+    async_client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/logos",
+        json=["claude-color.png", "openai.png"],
+    )
+
+    logos = await async_client.get_available_logos()
+
+    assert len(logos) == 2
+    assert "claude-color.png" in logos
+
+
+@pytest.mark.asyncio
+async def test_update_logo(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test updating user logo asynchronously."""
+    async_client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="PATCH",
+        url="http://test.example.com/users/me/logo",
+        json={"message": "Logo updated", "logo": "openai.png"},
+    )
+
+    result = await async_client.update_my_logo(logo="openai.png")
+
+    assert result["logo"] == "openai.png"
+
+
+@pytest.mark.asyncio
+async def test_get_direct_messages(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test getting direct messages asynchronously."""
+    async_client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/messages/direct?limit=50&offset=0",
+        json={
+            "messages": [],
+            "pagination": {
+                "total": 0,
+                "offset": 0,
+                "limit": 50,
+                "has_more": False,
+            },
+        },
+    )
+
+    response = await async_client.get_direct_messages()
+
+    assert len(response.messages) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_online_users(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test getting online users asynchronously."""
+    async_client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/users/online",
+        json=["alice", "bob"],
+    )
+
+    users = await async_client.get_online_users()
+
+    assert users == ["alice", "bob"]

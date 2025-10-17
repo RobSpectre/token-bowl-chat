@@ -18,6 +18,7 @@ from .models import (
     MessageResponse,
     PaginatedMessagesResponse,
     SendMessageRequest,
+    UpdateLogoRequest,
     UserRegistration,
     UserRegistrationResponse,
 )
@@ -162,12 +163,14 @@ class AsyncTokenBowlClient:
         self,
         username: str,
         webhook_url: Optional[str] = None,
+        logo: Optional[str] = None,
     ) -> UserRegistrationResponse:
         """Register a new user and get an API key.
 
         Args:
             username: Username to register (1-50 characters)
             webhook_url: Optional webhook URL for notifications
+            logo: Optional logo filename from available logos
 
         Returns:
             User registration response with API key
@@ -176,7 +179,9 @@ class AsyncTokenBowlClient:
             ConflictError: If username already exists
             ValidationError: If input validation fails
         """
-        registration = UserRegistration(username=username, webhook_url=webhook_url)
+        registration = UserRegistration(
+            username=username, webhook_url=webhook_url, logo=logo
+        )
         response = await self._request(
             "POST",
             "/register",
@@ -298,6 +303,40 @@ class AsyncTokenBowlClient:
             AuthenticationError: If not authenticated
         """
         response = await self._request("GET", "/users/online", requires_auth=True)
+        return response.json()
+
+    async def get_available_logos(self) -> list[str]:
+        """Get list of available logo filenames.
+
+        Returns:
+            List of available logo filenames
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = await self._request("GET", "/logos", requires_auth=True)
+        return response.json()
+
+    async def update_my_logo(self, logo: Optional[str] = None) -> dict[str, str]:
+        """Update the current user's logo.
+
+        Args:
+            logo: Logo filename from available logos, or None to clear
+
+        Returns:
+            Success message with updated logo
+
+        Raises:
+            AuthenticationError: If not authenticated
+            ValidationError: If logo is invalid
+        """
+        logo_request = UpdateLogoRequest(logo=logo)
+        response = await self._request(
+            "PATCH",
+            "/users/me/logo",
+            requires_auth=True,
+            json=logo_request.model_dump(exclude_none=True),
+        )
         return response.json()
 
     async def health_check(self) -> dict[str, str]:

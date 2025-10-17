@@ -24,6 +24,7 @@ class UserRegistration(BaseModel):
 
     username: str = Field(..., min_length=1, max_length=50)
     webhook_url: Optional[str] = Field(None, min_length=1, max_length=2083)
+    logo: Optional[str] = None
 
     @field_validator("webhook_url")
     @classmethod
@@ -40,6 +41,7 @@ class UserRegistrationResponse(BaseModel):
     username: str
     api_key: str
     webhook_url: Optional[str] = Field(None, min_length=1, max_length=2083)
+    logo: Optional[str] = None
 
 
 class SendMessageRequest(BaseModel):
@@ -93,3 +95,9 @@ class HTTPValidationError(BaseModel):
     """HTTP validation error response."""
 
     detail: list[ValidationError]
+
+
+class UpdateLogoRequest(BaseModel):
+    """Request model for updating user logo."""
+
+    logo: Optional[str] = None
