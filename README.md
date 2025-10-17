@@ -1,4 +1,10 @@
-# Token Bowl Chat Client
+# Token Bowl Chat
+
+[![CI](https://github.com/RobSpectre/token-bowl-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/RobSpectre/token-bowl-chat/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/RobSpectre/token-bowl-chat/branch/main/graph/badge.svg)](https://codecov.io/gh/RobSpectre/token-bowl-chat)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://badge.fury.io/py/token-bowl-chat.svg)](https://badge.fury.io/py/token-bowl-chat)
 
 A fully type-hinted Python client for the Token Bowl Chat Server API. Built with modern Python best practices and comprehensive error handling.
 
@@ -18,12 +24,12 @@ A fully type-hinted Python client for the Token Bowl Chat Server API. Built with
 
 Using uv (recommended, fastest):
 ```bash
-uv pip install token-bowl-chat-client
+uv pip install token-bowl-chat
 ```
 
 Using pip:
 ```bash
-pip install token-bowl-chat-client
+pip install token-bowl-chat
 ```
 
 ### For development
@@ -31,8 +37,8 @@ pip install token-bowl-chat-client
 Using uv (recommended):
 ```bash
 # Clone the repository
-git clone https://github.com/token-bowl/token-bowl-chat-client.git
-cd token-bowl-chat-client
+git clone https://github.com/RobSpectre/token-bowl-chat.git
+cd token-bowl-chat
 
 # Create virtual environment and install with dev dependencies
 uv venv
@@ -43,8 +49,8 @@ uv pip install -e ".[dev]"
 Using traditional tools:
 ```bash
 # Clone the repository
-git clone https://github.com/token-bowl/token-bowl-chat-client.git
-cd token-bowl-chat-client
+git clone https://github.com/RobSpectre/token-bowl-chat.git
+cd token-bowl-chat
 
 # Create a virtual environment
 python -m venv .venv
@@ -59,7 +65,7 @@ pip install -e ".[dev]"
 ### Synchronous Client
 
 ```python
-from token_bowl_chat_client import TokenBowlClient
+from token_bowl_chat import TokenBowlClient
 
 # Create a client instance
 client = TokenBowlClient(base_url="http://localhost:8000")
@@ -96,7 +102,7 @@ print(f"Online: {online}")
 
 ```python
 import asyncio
-from token_bowl_chat_client import AsyncTokenBowlClient
+from token_bowl_chat import AsyncTokenBowlClient
 
 async def main():
     # Use as async context manager
@@ -226,7 +232,7 @@ All exceptions inherit from `TokenBowlError`:
 ### Error Handling
 
 ```python
-from token_bowl_chat_client import (
+from token_bowl_chat import (
     TokenBowlClient,
     AuthenticationError,
     ConflictError,
@@ -259,7 +265,7 @@ pytest
 ### Running tests with coverage
 
 ```bash
-pytest --cov=token_bowl_chat_client --cov-report=html
+pytest --cov=token_bowl_chat --cov-report=html
 ```
 
 ### Linting and formatting
@@ -285,9 +291,9 @@ ruff check --fix .
 ## Project Structure
 
 ```
-token-bowl-chat-client/
+token-bowl-chat/
 ├── src/
-│   └── token_bowl_chat_client/
+│   └── token_bowl_chat/
 │       ├── __init__.py
 │       └── py.typed
 ├── tests/

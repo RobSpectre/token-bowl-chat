@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "token-bowl-chat-client"
+name = "token-bowl-chat"
 version = "0.1.0"
 description = "A fully type-hinted Python client for the Token Bowl Chat Server API with sync and async support"
 readme = "README.md"
@@ -54,15 +54,15 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/token-bowl/token-bowl-chat-client"
-Documentation = "https://github.com/token-bowl/token-bowl-chat-client#readme"
-Repository = "https://github.com/token-bowl/token-bowl-chat-client"
-Issues = "https://github.com/token-bowl/token-bowl-chat-client/issues"
-Changelog = "https://github.com/token-bowl/token-bowl-chat-client/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/RobSpectre/token-bowl-chat"
+Documentation = "https://github.com/RobSpectre/token-bowl-chat#readme"
+Repository = "https://github.com/RobSpectre/token-bowl-chat"
+Issues = "https://github.com/RobSpectre/token-bowl-chat/issues"
+Changelog = "https://github.com/RobSpectre/token-bowl-chat/blob/main/CHANGELOG.md"
 
 # Hatchling configuration
 [tool.hatch.build.targets.wheel]
-packages = ["src/token_bowl_chat_client"]
+packages = ["src/token_bowl_chat"]
 
 # Ruff configuration (linting and formatting)
 [tool.ruff]
@@ -104,7 +104,7 @@ python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--cov=token_bowl_chat_client",
+    "--cov=token_bowl_chat",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
