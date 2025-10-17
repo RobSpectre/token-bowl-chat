@@ -6,10 +6,8 @@ from pytest_httpx import HTTPXMock
 from token_bowl_chat import (
     AuthenticationError,
     ConflictError,
-    MessageResponse,
     MessageType,
     NotFoundError,
-    PaginatedMessagesResponse,
     TokenBowlClient,
     ValidationError,
 )

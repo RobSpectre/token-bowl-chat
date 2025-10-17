@@ -1,12 +1,12 @@
 """Exceptions for Token Bowl Chat Client."""
 
-from typing import Any, Optional
+from typing import Any
 
 
 class TokenBowlError(Exception):
     """Base exception for all Token Bowl Chat Client errors."""
 
-    def __init__(self, message: str, response: Optional[Any] = None) -> None:
+    def __init__(self, message: str, response: Any | None = None) -> None:
         """Initialize the error.
 
         Args:

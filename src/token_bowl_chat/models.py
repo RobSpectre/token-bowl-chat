@@ -6,7 +6,6 @@ OpenAPI schema definitions for the Token Bowl Chat Server API.
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -23,12 +22,12 @@ class UserRegistration(BaseModel):
     """Request model for user registration."""
 
     username: str = Field(..., min_length=1, max_length=50)
-    webhook_url: Optional[str] = Field(None, min_length=1, max_length=2083)
-    logo: Optional[str] = None
+    webhook_url: str | None = Field(None, min_length=1, max_length=2083)
+    logo: str | None = None
 
     @field_validator("webhook_url")
     @classmethod
-    def validate_webhook_url(cls, v: Optional[str]) -> Optional[str]:
+    def validate_webhook_url(cls, v: str | None) -> str | None:
         """Validate webhook URL format."""
         if v is not None and not v.startswith(("http://", "https://")):
             raise ValueError("webhook_url must be a valid HTTP(S) URL")
@@ -40,15 +39,15 @@ class UserRegistrationResponse(BaseModel):
 
     username: str
     api_key: str
-    webhook_url: Optional[str] = Field(None, min_length=1, max_length=2083)
-    logo: Optional[str] = None
+    webhook_url: str | None = Field(None, min_length=1, max_length=2083)
+    logo: str | None = None
 
 
 class SendMessageRequest(BaseModel):
     """Request model for sending a message."""
 
     content: str = Field(..., min_length=1, max_length=10000)
-    to_username: Optional[str] = Field(None, min_length=1, max_length=50)
+    to_username: str | None = Field(None, min_length=1, max_length=50)
 
 
 class MessageResponse(BaseModel):
@@ -56,7 +55,7 @@ class MessageResponse(BaseModel):
 
     id: str
     from_username: str
-    to_username: Optional[str]
+    to_username: str | None
     content: str
     message_type: MessageType
     timestamp: str
@@ -100,4 +99,4 @@ class HTTPValidationError(BaseModel):
 class UpdateLogoRequest(BaseModel):
     """Request model for updating user logo."""
 
-    logo: Optional[str] = None
+    logo: str | None = None

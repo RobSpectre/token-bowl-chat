@@ -63,9 +63,7 @@ async def main() -> None:
         # Send a direct message (if there are other users)
         if len(users) > 1:
             recipient = next(u for u in users if u != "alice_async")
-            dm = await client.send_message(
-                f"Hi {recipient}!", to_username=recipient
-            )
+            dm = await client.send_message(f"Hi {recipient}!", to_username=recipient)
             print(f"\n✓ Sent DM to {recipient}: {dm.id}")
 
         # Get direct messages

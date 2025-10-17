@@ -1,6 +1,6 @@
 """Synchronous client for Token Bowl Chat Server."""
 
-from typing import Optional
+from typing import Any, cast
 
 import httpx
 
@@ -40,7 +40,7 @@ class TokenBowlClient:
     def __init__(
         self,
         base_url: str = "http://localhost:8000",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         timeout: float = 30.0,
     ) -> None:
         """Initialize the Token Bowl client.
@@ -124,7 +124,7 @@ class TokenBowlClient:
         method: str,
         path: str,
         requires_auth: bool = False,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> httpx.Response:
         """Make an HTTP request.
 
@@ -160,8 +160,8 @@ class TokenBowlClient:
     def register(
         self,
         username: str,
-        webhook_url: Optional[str] = None,
-        logo: Optional[str] = None,
+        webhook_url: str | None = None,
+        logo: str | None = None,
     ) -> UserRegistrationResponse:
         """Register a new user and get an API key.
 
@@ -190,7 +190,7 @@ class TokenBowlClient:
     def send_message(
         self,
         content: str,
-        to_username: Optional[str] = None,
+        to_username: str | None = None,
     ) -> MessageResponse:
         """Send a message to the room or as a direct message.
 
@@ -219,7 +219,7 @@ class TokenBowlClient:
         self,
         limit: int = 50,
         offset: int = 0,
-        since: Optional[str] = None,
+        since: str | None = None,
     ) -> PaginatedMessagesResponse:
         """Get recent room messages with pagination.
 
@@ -235,7 +235,7 @@ class TokenBowlClient:
             AuthenticationError: If not authenticated
             ValidationError: If parameters are invalid
         """
-        params = {"limit": limit, "offset": offset}
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
         if since is not None:
             params["since"] = since
 
@@ -251,7 +251,7 @@ class TokenBowlClient:
         self,
         limit: int = 50,
         offset: int = 0,
-        since: Optional[str] = None,
+        since: str | None = None,
     ) -> PaginatedMessagesResponse:
         """Get direct messages for the current user with pagination.
 
@@ -267,7 +267,7 @@ class TokenBowlClient:
             AuthenticationError: If not authenticated
             ValidationError: If parameters are invalid
         """
-        params = {"limit": limit, "offset": offset}
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
         if since is not None:
             params["since"] = since
 
@@ -289,7 +289,7 @@ class TokenBowlClient:
             AuthenticationError: If not authenticated
         """
         response = self._request("GET", "/users", requires_auth=True)
-        return response.json()
+        return cast(list[str], response.json())
 
     def get_online_users(self) -> list[str]:
         """Get list of users currently connected via WebSocket.
@@ -301,7 +301,7 @@ class TokenBowlClient:
             AuthenticationError: If not authenticated
         """
         response = self._request("GET", "/users/online", requires_auth=True)
-        return response.json()
+        return cast(list[str], response.json())
 
     def get_available_logos(self) -> list[str]:
         """Get list of available logo filenames.
@@ -313,9 +313,9 @@ class TokenBowlClient:
             AuthenticationError: If not authenticated
         """
         response = self._request("GET", "/logos", requires_auth=True)
-        return response.json()
+        return cast(list[str], response.json())
 
-    def update_my_logo(self, logo: Optional[str] = None) -> dict[str, str]:
+    def update_my_logo(self, logo: str | None = None) -> dict[str, str]:
         """Update the current user's logo.
 
         Args:
@@ -335,7 +335,7 @@ class TokenBowlClient:
             requires_auth=True,
             json=logo_request.model_dump(exclude_none=True),
         )
-        return response.json()
+        return cast(dict[str, str], response.json())
 
     def health_check(self) -> dict[str, str]:
         """Check server health status.
@@ -344,4 +344,4 @@ class TokenBowlClient:
             Health status dictionary
         """
         response = self._request("GET", "/health")
-        return response.json()
+        return cast(dict[str, str], response.json())
