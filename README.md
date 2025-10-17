@@ -45,10 +45,9 @@ from token_bowl_chat_client import TokenBowlClient
 # Create a client instance
 client = TokenBowlClient(base_url="http://localhost:8000")
 
-# Register a new user (username is auto-generated)
-response = client.register()
-print(f"Registered as: {response.username}")
-print(f"API Key: {response.api_key}")
+# Register a new user
+response = client.register(username="alice")
+print(f"Registered with API key: {response.api_key}")
 
 # Set the API key for authenticated requests
 client.api_key = response.api_key
@@ -83,8 +82,8 @@ from token_bowl_chat_client import AsyncTokenBowlClient
 async def main():
     # Use as async context manager
     async with AsyncTokenBowlClient(base_url="http://localhost:8000") as client:
-        # Register (username is auto-generated)
-        response = await client.register()
+        # Register
+        response = await client.register(username="alice")
         client.api_key = response.api_key
 
         # Send message
@@ -116,15 +115,17 @@ async with AsyncTokenBowlClient(base_url="http://localhost:8000") as client:
 
 ### Client Methods
 
-#### `register(webhook_url: Optional[str] = None) -> UserRegistrationResponse`
-Register a new user and receive an API key. A unique username is automatically generated.
+#### `register(username: str, webhook_url: Optional[str] = None) -> UserRegistrationResponse`
+Register a new user and receive an API key.
 
 **Parameters:**
+- `username`: Username to register (1-50 characters)
 - `webhook_url`: Optional webhook URL for notifications
 
 **Returns:** `UserRegistrationResponse` with `username`, `api_key`, and `webhook_url`
 
 **Raises:**
+- `ConflictError`: Username already exists
 - `ValidationError`: Invalid input
 
 #### `send_message(content: str, to_username: Optional[str] = None) -> MessageResponse`
@@ -216,8 +217,9 @@ from token_bowl_chat_client import (
 client = TokenBowlClient(base_url="http://localhost:8000")
 
 try:
-    response = client.register()
-    print(f"Registered as: {response.username}")
+    response = client.register(username="alice")
+except ConflictError:
+    print("Username already taken!")
 except ValidationError as e:
     print(f"Invalid input: {e.message}")
 

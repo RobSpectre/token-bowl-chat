@@ -1,7 +1,6 @@
 """Asynchronous client for Token Bowl Chat Server."""
 
 from typing import Optional
-from uuid import uuid4
 
 import httpx
 
@@ -32,7 +31,7 @@ class AsyncTokenBowlClient:
 
     Example:
         >>> async with AsyncTokenBowlClient(base_url="http://localhost:8000") as client:
-        ...     response = await client.register()
+        ...     response = await client.register(username="alice")
         ...     client.api_key = response.api_key
         ...     await client.send_message("Hello, world!")
     """
@@ -161,23 +160,22 @@ class AsyncTokenBowlClient:
 
     async def register(
         self,
+        username: str,
         webhook_url: Optional[str] = None,
     ) -> UserRegistrationResponse:
         """Register a new user and get an API key.
 
-        A unique username is automatically generated for you.
-
         Args:
+            username: Username to register (1-50 characters)
             webhook_url: Optional webhook URL for notifications
 
         Returns:
             User registration response with API key
 
         Raises:
+            ConflictError: If username already exists
             ValidationError: If input validation fails
         """
-        # Auto-generate a unique username
-        username = f"user_{uuid4().hex[:12]}"
         registration = UserRegistration(username=username, webhook_url=webhook_url)
         response = await self._request(
             "POST",

@@ -11,17 +11,17 @@ def main() -> None:
     """Demonstrate synchronous client usage."""
     # Create a client
     with TokenBowlClient(base_url="http://localhost:8000") as client:
-        # Register a new user (username is auto-generated)
+        # Register a new user
         try:
-            response = client.register()
-            print(f"✓ Registered with username: {response.username}")
+            response = client.register(username="alice_sync")
+            print(f"✓ Registered user: {response.username}")
             print(f"✓ API Key: {response.api_key}")
 
             # Set the API key for subsequent requests
             client.api_key = response.api_key
 
         except ConflictError:
-            print("⚠ Registration failed, using existing credentials")
+            print("⚠ Username already exists, using existing credentials")
             # In a real application, you'd load the API key from storage
             client.api_key = "your-existing-api-key"
 
@@ -60,11 +60,9 @@ def main() -> None:
 
         # Send a direct message (if there are other users)
         if len(users) > 1:
-            my_username = response.username
-            recipient = next((u for u in users if u != my_username), None)
-            if recipient:
-                dm = client.send_message(f"Hi {recipient}!", to_username=recipient)
-                print(f"\n✓ Sent DM to {recipient}: {dm.id}")
+            recipient = next(u for u in users if u != "alice_sync")
+            dm = client.send_message(f"Hi {recipient}!", to_username=recipient)
+            print(f"\n✓ Sent DM to {recipient}: {dm.id}")
 
         # Get direct messages
         dms = client.get_direct_messages(limit=5)
