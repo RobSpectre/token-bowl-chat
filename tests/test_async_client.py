@@ -1,0 +1,153 @@
+"""Tests for the asynchronous Token Bowl client."""
+
+import pytest
+from pytest_httpx import HTTPXMock
+
+from token_bowl_chat_client import (
+    AsyncTokenBowlClient,
+    AuthenticationError,
+    MessageType,
+)
+
+
+@pytest.fixture
+def async_client() -> AsyncTokenBowlClient:
+    """Create a test async client."""
+    return AsyncTokenBowlClient(base_url="http://test.example.com")
+
+
+@pytest.mark.asyncio
+async def test_register_success(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test successful async user registration."""
+    httpx_mock.add_response(
+        method="POST",
+        url="http://test.example.com/register",
+        json={
+            "username": "alice",
+            "api_key": "test-key-123",
+            "webhook_url": None,
+        },
+        status_code=201,
+    )
+
+    response = await async_client.register(username="alice")
+
+    assert response.username == "alice"
+    assert response.api_key == "test-key-123"
+
+
+@pytest.mark.asyncio
+async def test_send_message(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test sending an async message."""
+    async_client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="POST",
+        url="http://test.example.com/messages",
+        json={
+            "id": "msg-1",
+            "from_username": "alice",
+            "to_username": None,
+            "content": "Hello, async!",
+            "message_type": "room",
+            "timestamp": "2025-10-16T12:00:00Z",
+        },
+        status_code=201,
+    )
+
+    response = await async_client.send_message("Hello, async!")
+
+    assert response.content == "Hello, async!"
+    assert response.message_type == MessageType.ROOM
+
+
+@pytest.mark.asyncio
+async def test_get_messages(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test getting messages asynchronously."""
+    async_client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/messages?limit=50&offset=0",
+        json={
+            "messages": [
+                {
+                    "id": "msg-1",
+                    "from_username": "alice",
+                    "to_username": None,
+                    "content": "Hello!",
+                    "message_type": "room",
+                    "timestamp": "2025-10-16T12:00:00Z",
+                }
+            ],
+            "pagination": {
+                "total": 1,
+                "offset": 0,
+                "limit": 50,
+                "has_more": False,
+            },
+        },
+    )
+
+    response = await async_client.get_messages()
+
+    assert len(response.messages) == 1
+    assert response.messages[0].content == "Hello!"
+
+
+@pytest.mark.asyncio
+async def test_get_users(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test getting users asynchronously."""
+    async_client.api_key = "test-key-123"
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/users",
+        json=["alice", "bob"],
+    )
+
+    users = await async_client.get_users()
+
+    assert users == ["alice", "bob"]
+
+
+@pytest.mark.asyncio
+async def test_health_check(
+    httpx_mock: HTTPXMock, async_client: AsyncTokenBowlClient
+) -> None:
+    """Test async health check."""
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/health",
+        json={"status": "healthy"},
+    )
+
+    health = await async_client.health_check()
+
+    assert health["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_context_manager(httpx_mock: HTTPXMock) -> None:
+    """Test using async client as context manager."""
+    httpx_mock.add_response(
+        method="GET",
+        url="http://test.example.com/health",
+        json={"status": "healthy"},
+    )
+
+    async with AsyncTokenBowlClient(base_url="http://test.example.com") as client:
+        health = await client.health_check()
+        assert health["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_no_auth_error(async_client: AsyncTokenBowlClient) -> None:
+    """Test error when authentication required but not provided."""
+    with pytest.raises(AuthenticationError, match="API key required"):
+        await async_client.send_message("Hello!")
