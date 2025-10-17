@@ -14,11 +14,36 @@ A fully type-hinted Python client for the Token Bowl Chat Server API. Built with
 
 ## Installation
 
+### For users
+
+Using uv (recommended, fastest):
+```bash
+uv pip install token-bowl-chat-client
+```
+
+Using pip:
+```bash
+pip install token-bowl-chat-client
+```
+
 ### For development
 
+Using uv (recommended):
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/token-bowl-chat-client.git
+git clone https://github.com/token-bowl/token-bowl-chat-client.git
+cd token-bowl-chat-client
+
+# Create virtual environment and install with dev dependencies
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
+```
+
+Using traditional tools:
+```bash
+# Clone the repository
+git clone https://github.com/token-bowl/token-bowl-chat-client.git
 cd token-bowl-chat-client
 
 # Create a virtual environment
@@ -27,12 +52,6 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install in editable mode with development dependencies
 pip install -e ".[dev]"
-```
-
-### For users
-
-```bash
-pip install token-bowl-chat-client
 ```
 
 ## Quick Start

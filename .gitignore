@@ -111,6 +111,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.build-env/
 
 # Spyder project settings
 .spyderproject
@@ -143,6 +144,7 @@ cython_debug/
 *.swo
 *~
 .DS_Store
+.claude/
 
 # Ruff cache
 .ruff_cache/
