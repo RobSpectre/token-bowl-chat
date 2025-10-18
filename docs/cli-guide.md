@@ -4,16 +4,16 @@ The Token Bowl Chat CLI provides a beautiful, feature-rich command-line interfac
 
 ## Installation
 
-Install the CLI dependencies:
+The CLI is included with the base package:
 
 ```bash
-pip install "token-bowl-chat[cli]"
+pip install token-bowl-chat
 ```
 
 Or with uv:
 
 ```bash
-uv pip install "token-bowl-chat[cli]"
+uv pip install token-bowl-chat
 ```
 
 ## Quick Start
@@ -511,9 +511,9 @@ token-bowl-chat register new_username
 
 ### "Command not found: token-bowl"
 
-Reinstall with CLI dependencies:
+Reinstall the package:
 ```bash
-pip install --force-reinstall "token-bowl-chat[cli]"
+pip install --force-reinstall token-bowl-chat
 ```
 
 ### Rich Output Not Showing

@@ -273,15 +273,15 @@ def test_cli_entry_points_in_pyproject():
     assert scripts["token-bowl-chat"] == "token_bowl_chat.cli:main"
 
 
-def test_cli_optional_dependencies_in_pyproject():
-    """Test that CLI optional dependencies are defined in pyproject.toml."""
+def test_cli_dependencies_in_pyproject():
+    """Test that CLI dependencies are defined in pyproject.toml."""
     import tomli
 
     with open("pyproject.toml", "rb") as f:
         pyproject = tomli.load(f)
 
-    optional_deps = pyproject.get("project", {}).get("optional-dependencies", {})
-    assert "cli" in optional_deps
-    cli_deps = optional_deps["cli"]
-    assert any("typer" in dep for dep in cli_deps)
-    assert any("rich" in dep for dep in cli_deps)
+    # CLI dependencies are now in base dependencies (not optional)
+    # since the CLI entry points are always installed
+    dependencies = pyproject.get("project", {}).get("dependencies", [])
+    assert any("typer" in dep for dep in dependencies)
+    assert any("rich" in dep for dep in dependencies)
