@@ -17,7 +17,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from token_bowl_chat import TokenBowlClient, TokenBowlWebSocket
+from token_bowl_chat import TokenBowlClient, TokenBowlWebSocket, __version__
 from token_bowl_chat.exceptions import (
     AuthenticationError,
     ConflictError,
@@ -35,6 +35,14 @@ app = typer.Typer(
 )
 console = Console()
 
+
+def version_callback(value: bool) -> None:
+    """Print version and exit."""
+    if value:
+        console.print(f"token-bowl-chat version {__version__}")
+        raise typer.Exit()
+
+
 # Create command groups
 messages_app = typer.Typer(help="📨 Send and manage messages")
 users_app = typer.Typer(help="👥 Manage users and profiles")
@@ -45,6 +53,22 @@ app.add_typer(messages_app, name="messages")
 app.add_typer(users_app, name="users")
 app.add_typer(unread_app, name="unread")
 app.add_typer(live_app, name="live")
+
+
+# Global options
+@app.callback()
+def main_callback(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-v",
+        callback=version_callback,
+        is_eager=True,
+        help="Show version",
+    ),
+) -> None:
+    """Token Bowl Chat CLI."""
+    pass
 
 
 def get_client(api_key: str | None = None) -> TokenBowlClient:
