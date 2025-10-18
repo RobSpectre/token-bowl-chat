@@ -16,7 +16,7 @@ from token_bowl_chat import (
 @pytest.fixture
 def client() -> TokenBowlClient:
     """Create a test client."""
-    return TokenBowlClient(base_url="http://test.example.com")
+    return TokenBowlClient(api_key="test-key-123", base_url="http://test.example.com")
 
 
 def test_register_success(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
@@ -123,6 +123,7 @@ def test_send_message_direct(httpx_mock: HTTPXMock, client: TokenBowlClient) -> 
 
 def test_send_message_no_auth(client: TokenBowlClient) -> None:
     """Test sending message without authentication."""
+    client.api_key = None  # Clear API key to test authentication error
     with pytest.raises(AuthenticationError, match="API key required"):
         client.send_message("Hello!")
 
@@ -241,13 +242,21 @@ def test_get_users(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
     httpx_mock.add_response(
         method="GET",
         url="http://test.example.com/users",
-        json=["alice", "bob", "charlie"],
+        json=[
+            {"username": "alice", "logo": "claude.png", "bot": False, "viewer": False},
+            {"username": "bob", "emoji": "🤖", "bot": True, "viewer": False},
+            {"username": "charlie", "bot": False, "viewer": False},
+        ],
     )
 
     users = client.get_users()
 
-    assert users == ["alice", "bob", "charlie"]
     assert len(users) == 3
+    assert users[0].username == "alice"
+    assert users[0].logo == "claude.png"
+    assert users[1].username == "bob"
+    assert users[1].emoji == "🤖"
+    assert users[1].bot is True
 
 
 def test_get_online_users(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
@@ -256,13 +265,17 @@ def test_get_online_users(httpx_mock: HTTPXMock, client: TokenBowlClient) -> Non
     httpx_mock.add_response(
         method="GET",
         url="http://test.example.com/users/online",
-        json=["alice", "bob"],
+        json=[
+            {"username": "alice", "logo": "claude.png", "bot": False, "viewer": False},
+            {"username": "bob", "bot": False, "viewer": False},
+        ],
     )
 
     users = client.get_online_users()
 
-    assert users == ["alice", "bob"]
     assert len(users) == 2
+    assert users[0].username == "alice"
+    assert users[1].username == "bob"
 
 
 def test_health_check(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
@@ -286,7 +299,9 @@ def test_context_manager(httpx_mock: HTTPXMock) -> None:
         json={"status": "healthy"},
     )
 
-    with TokenBowlClient(base_url="http://test.example.com") as client:
+    with TokenBowlClient(
+        api_key="test-key-123", base_url="http://test.example.com"
+    ) as client:
         health = client.health_check()
         assert health["status"] == "healthy"
 

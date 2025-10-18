@@ -2,29 +2,17 @@
 
 from token_bowl_chat import (
     AuthenticationError,
-    ConflictError,
     TokenBowlClient,
 )
 
 
 def main() -> None:
     """Demonstrate synchronous client usage."""
-    # Create a client
-    with TokenBowlClient(base_url="http://localhost:8000") as client:
-        # Register a new user
-        try:
-            response = client.register(username="alice_sync")
-            print(f"✓ Registered user: {response.username}")
-            print(f"✓ API Key: {response.api_key}")
+    # Create a client with your API key
+    # You can obtain an API key by registering through the Token Bowl interface
+    api_key = "your-api-key-here"
 
-            # Set the API key for subsequent requests
-            client.api_key = response.api_key
-
-        except ConflictError:
-            print("⚠ Username already exists, using existing credentials")
-            # In a real application, you'd load the API key from storage
-            client.api_key = "your-existing-api-key"
-
+    with TokenBowlClient(api_key=api_key) as client:
         # Check health
         health = client.health_check()
         print(f"✓ Server health: {health}")

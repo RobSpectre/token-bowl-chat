@@ -24,6 +24,10 @@ class UserRegistration(BaseModel):
     username: str = Field(..., min_length=1, max_length=50)
     webhook_url: str | None = Field(None, min_length=1, max_length=2083)
     logo: str | None = None
+    viewer: bool = False
+    admin: bool = False
+    bot: bool = False
+    emoji: str | None = None
 
     @field_validator("webhook_url")
     @classmethod
@@ -41,6 +45,10 @@ class UserRegistrationResponse(BaseModel):
     api_key: str
     webhook_url: str | None = Field(None, min_length=1, max_length=2083)
     logo: str | None = None
+    viewer: bool = False
+    admin: bool = False
+    bot: bool = False
+    emoji: str | None = None
 
 
 class SendMessageRequest(BaseModel):
@@ -55,6 +63,9 @@ class MessageResponse(BaseModel):
 
     id: str
     from_username: str
+    from_user_logo: str | None = None
+    from_user_emoji: str | None = None
+    from_user_bot: bool = False
     to_username: str | None
     content: str
     message_type: MessageType
@@ -100,3 +111,110 @@ class UpdateLogoRequest(BaseModel):
     """Request model for updating user logo."""
 
     logo: str | None = None
+
+
+class UpdateWebhookRequest(BaseModel):
+    """Request model for updating user webhook URL."""
+
+    webhook_url: str | None = Field(None, min_length=1, max_length=2083)
+
+    @field_validator("webhook_url")
+    @classmethod
+    def validate_webhook_url(cls, v: str | None) -> str | None:
+        """Validate webhook URL format."""
+        if v is not None and not v.startswith(("http://", "https://")):
+            raise ValueError("webhook_url must be a valid HTTP(S) URL")
+        return v
+
+
+class UpdateUsernameRequest(BaseModel):
+    """Request model for updating username."""
+
+    username: str = Field(..., min_length=1, max_length=50)
+
+
+class UnreadCountResponse(BaseModel):
+    """Response model for unread message counts."""
+
+    unread_room_messages: int
+    unread_direct_messages: int
+    total_unread: int
+
+
+class UserProfileResponse(BaseModel):
+    """Response model for user profile."""
+
+    username: str
+    email: str | None = None
+    api_key: str
+    webhook_url: str | None = Field(None, min_length=1, max_length=2083)
+    logo: str | None = None
+    viewer: bool = False
+    admin: bool = False
+    bot: bool = False
+    emoji: str | None = None
+    created_at: str
+
+
+class PublicUserProfile(BaseModel):
+    """Public user profile (no sensitive information)."""
+
+    username: str
+    logo: str | None = None
+    emoji: str | None = None
+    bot: bool = False
+    viewer: bool = False
+
+
+class StytchLoginRequest(BaseModel):
+    """Request model for Stytch magic link login/signup."""
+
+    email: str = Field(..., min_length=3, max_length=255)
+    username: str | None = Field(None, min_length=1, max_length=50)
+
+
+class StytchLoginResponse(BaseModel):
+    """Response model for Stytch magic link send."""
+
+    message: str
+    email: str
+
+
+class StytchAuthenticateRequest(BaseModel):
+    """Request model for Stytch magic link authentication."""
+
+    token: str = Field(..., min_length=1)
+
+
+class StytchAuthenticateResponse(BaseModel):
+    """Response model for Stytch authentication."""
+
+    username: str
+    session_token: str
+    api_key: str
+
+
+class AdminUpdateUserRequest(BaseModel):
+    """Admin request model for updating any user's profile."""
+
+    email: str | None = None
+    webhook_url: str | None = Field(None, min_length=1, max_length=2083)
+    logo: str | None = None
+    viewer: bool | None = None
+    admin: bool | None = None
+    bot: bool | None = None
+    emoji: str | None = None
+
+    @field_validator("webhook_url")
+    @classmethod
+    def validate_webhook_url(cls, v: str | None) -> str | None:
+        """Validate webhook URL format."""
+        if v is not None and v != "" and not v.startswith(("http://", "https://")):
+            raise ValueError("webhook_url must be a valid HTTP(S) URL")
+        return v
+
+
+class AdminMessageUpdate(BaseModel):
+    """Admin request model for updating message content."""
+
+    content: str = Field(..., min_length=1, max_length=10000)

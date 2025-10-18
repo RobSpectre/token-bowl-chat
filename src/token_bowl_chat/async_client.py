@@ -1,5 +1,6 @@
 """Asynchronous client for Token Bowl Chat Server."""
 
+import os
 from typing import Any, cast
 
 import httpx
@@ -15,10 +16,21 @@ from .exceptions import (
     ValidationError,
 )
 from .models import (
+    AdminMessageUpdate,
+    AdminUpdateUserRequest,
     MessageResponse,
     PaginatedMessagesResponse,
+    PublicUserProfile,
     SendMessageRequest,
+    StytchAuthenticateRequest,
+    StytchAuthenticateResponse,
+    StytchLoginRequest,
+    StytchLoginResponse,
+    UnreadCountResponse,
     UpdateLogoRequest,
+    UpdateUsernameRequest,
+    UpdateWebhookRequest,
+    UserProfileResponse,
     UserRegistration,
     UserRegistrationResponse,
 )
@@ -31,27 +43,26 @@ class AsyncTokenBowlClient:
     API with full type hints and error handling.
 
     Example:
-        >>> async with AsyncTokenBowlClient(base_url="http://localhost:8000") as client:
-        ...     response = await client.register(username="alice")
-        ...     client.api_key = response.api_key
+        >>> async with AsyncTokenBowlClient(api_key="your-api-key") as client:
         ...     await client.send_message("Hello, world!")
     """
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
+        *,
         api_key: str | None = None,
+        base_url: str = "https://api.tokenbowl.ai",
         timeout: float = 30.0,
     ) -> None:
         """Initialize the async Token Bowl client.
 
         Args:
-            base_url: Base URL of the Token Bowl server
-            api_key: API key for authentication (can be set later)
+            api_key: API key for authentication (optional, defaults to TOKEN_BOWL_CHAT_API_KEY env var)
+            base_url: Base URL of the Token Bowl server (optional)
             timeout: Request timeout in seconds
         """
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("TOKEN_BOWL_CHAT_API_KEY")
         self.timeout = timeout
         self._client = httpx.AsyncClient(timeout=timeout)
 
@@ -281,29 +292,31 @@ class AsyncTokenBowlClient:
         )
         return PaginatedMessagesResponse.model_validate(response.json())
 
-    async def get_users(self) -> list[str]:
-        """Get list of all registered usernames.
+    async def get_users(self) -> list[PublicUserProfile]:
+        """Get list of all chat users with their display info.
+
+        Viewer users are excluded as they cannot receive messages.
 
         Returns:
-            List of usernames
+            List of user profiles with logos, emojis, and bot status
 
         Raises:
             AuthenticationError: If not authenticated
         """
         response = await self._request("GET", "/users", requires_auth=True)
-        return cast(list[str], response.json())
+        return [PublicUserProfile.model_validate(user) for user in response.json()]
 
-    async def get_online_users(self) -> list[str]:
-        """Get list of users currently connected via WebSocket.
+    async def get_online_users(self) -> list[PublicUserProfile]:
+        """Get list of users currently connected via WebSocket with their display info.
 
         Returns:
-            List of online usernames
+            List of online user profiles with logos, emojis, and bot status
 
         Raises:
             AuthenticationError: If not authenticated
         """
         response = await self._request("GET", "/users/online", requires_auth=True)
-        return cast(list[str], response.json())
+        return [PublicUserProfile.model_validate(user) for user in response.json()]
 
     async def get_available_logos(self) -> list[str]:
         """Get list of available logo filenames.
@@ -338,6 +351,403 @@ class AsyncTokenBowlClient:
             json=logo_request.model_dump(exclude_none=True),
         )
         return cast(dict[str, str], response.json())
+
+    # Stytch Authentication Methods
+
+    async def send_magic_link(
+        self, email: str, username: str | None = None
+    ) -> StytchLoginResponse:
+        """Send a magic link to user's email for passwordless authentication.
+
+        If the email is new, a username must be provided to create an account.
+        If the email exists, the username field is ignored.
+
+        Args:
+            email: Email address to send magic link to
+            username: Optional username for new account creation
+
+        Returns:
+            Stytch login response with confirmation message
+
+        Raises:
+            ValidationError: If input validation fails
+            ServerError: If Stytch is not enabled or request fails
+        """
+        request = StytchLoginRequest(email=email, username=username)
+        response = await self._request(
+            "POST",
+            "/auth/magic-link/send",
+            json=request.model_dump(exclude_none=True),
+        )
+        return StytchLoginResponse.model_validate(response.json())
+
+    async def authenticate_magic_link(self, token: str) -> StytchAuthenticateResponse:
+        """Authenticate a magic link token and return session information.
+
+        If this is a new user (first time authenticating), creates a user account.
+        Returns a session token for future requests and an API key.
+
+        Args:
+            token: Magic link token from email
+
+        Returns:
+            Authentication response with username, session_token, and api_key
+
+        Raises:
+            AuthenticationError: If authentication fails
+            ValidationError: If token is invalid
+        """
+        request = StytchAuthenticateRequest(token=token)
+        response = await self._request(
+            "POST",
+            "/auth/magic-link/authenticate",
+            json=request.model_dump(),
+        )
+        return StytchAuthenticateResponse.model_validate(response.json())
+
+    # Unread Message Management
+
+    async def get_unread_messages(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[MessageResponse]:
+        """Get unread room messages for the current user.
+
+        Args:
+            limit: Maximum number of messages to return (default: 50)
+            offset: Number of messages to skip (default: 0)
+
+        Returns:
+            List of unread room messages
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        response = await self._request(
+            "GET",
+            "/messages/unread",
+            requires_auth=True,
+            params=params,
+        )
+        return [MessageResponse.model_validate(msg) for msg in response.json()]
+
+    async def get_unread_direct_messages(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[MessageResponse]:
+        """Get unread direct messages for the current user.
+
+        Args:
+            limit: Maximum number of messages to return (default: 50)
+            offset: Number of messages to skip (default: 0)
+
+        Returns:
+            List of unread direct messages
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        response = await self._request(
+            "GET",
+            "/messages/direct/unread",
+            requires_auth=True,
+            params=params,
+        )
+        return [MessageResponse.model_validate(msg) for msg in response.json()]
+
+    async def get_unread_count(self) -> UnreadCountResponse:
+        """Get count of unread messages for the current user.
+
+        Returns:
+            Unread message counts (room, direct, and total)
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = await self._request(
+            "GET",
+            "/messages/unread/count",
+            requires_auth=True,
+        )
+        return UnreadCountResponse.model_validate(response.json())
+
+    async def mark_message_read(self, message_id: str) -> None:
+        """Mark a message as read.
+
+        Args:
+            message_id: ID of the message to mark as read
+
+        Raises:
+            AuthenticationError: If not authenticated
+            NotFoundError: If message doesn't exist
+        """
+        await self._request(
+            "POST",
+            f"/messages/{message_id}/read",
+            requires_auth=True,
+        )
+
+    async def mark_all_messages_read(self) -> dict[str, int]:
+        """Mark all messages as read for the current user.
+
+        Returns:
+            Dictionary with count of messages marked as read
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = await self._request(
+            "POST",
+            "/messages/mark-all-read",
+            requires_auth=True,
+        )
+        return cast(dict[str, int], response.json())
+
+    # User Profile Management
+
+    async def get_my_profile(self) -> UserProfileResponse:
+        """Get the current user's profile information.
+
+        Returns:
+            User profile with email, API key, and other information
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = await self._request(
+            "GET",
+            "/users/me",
+            requires_auth=True,
+        )
+        return UserProfileResponse.model_validate(response.json())
+
+    async def get_user_profile(self, username: str) -> PublicUserProfile:
+        """Get public profile for a specific user.
+
+        Returns public information (username, logo, emoji, bot, viewer status)
+        without sensitive data (API key, email, webhook URL).
+
+        Args:
+            username: Username to retrieve
+
+        Returns:
+            Public user profile
+
+        Raises:
+            AuthenticationError: If not authenticated
+            NotFoundError: If user not found
+        """
+        response = await self._request(
+            "GET",
+            f"/users/{username}",
+            requires_auth=True,
+        )
+        return PublicUserProfile.model_validate(response.json())
+
+    async def update_my_username(self, username: str) -> UserProfileResponse:
+        """Update the current user's username.
+
+        Args:
+            username: New username
+
+        Returns:
+            Updated user profile
+
+        Raises:
+            AuthenticationError: If not authenticated
+            ConflictError: If username already exists
+            ValidationError: If username is invalid
+        """
+        request = UpdateUsernameRequest(username=username)
+        response = await self._request(
+            "PATCH",
+            "/users/me/username",
+            requires_auth=True,
+            json=request.model_dump(),
+        )
+        return UserProfileResponse.model_validate(response.json())
+
+    async def update_my_webhook(self, webhook_url: str | None) -> dict[str, str]:
+        """Update the current user's webhook URL.
+
+        Args:
+            webhook_url: New webhook URL, or None to clear
+
+        Returns:
+            Success message with updated webhook URL
+
+        Raises:
+            AuthenticationError: If not authenticated
+            ValidationError: If webhook URL is invalid
+        """
+        request = UpdateWebhookRequest(webhook_url=webhook_url)
+        response = await self._request(
+            "PATCH",
+            "/users/me/webhook",
+            requires_auth=True,
+            json=request.model_dump(exclude_none=True),
+        )
+        return cast(dict[str, str], response.json())
+
+    async def regenerate_api_key(self) -> dict[str, str]:
+        """Regenerate the current user's API key.
+
+        This generates a new API key and invalidates the old one.
+        The old API key will no longer work for authentication.
+
+        Returns:
+            Success message with new API key
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = await self._request(
+            "POST",
+            "/users/me/regenerate-api-key",
+            requires_auth=True,
+        )
+        return cast(dict[str, str], response.json())
+
+    # Admin Methods
+
+    async def admin_get_all_users(self) -> list[UserProfileResponse]:
+        """Admin: Get all users with full profile information.
+
+        Returns:
+            List of all user profiles
+
+        Raises:
+            AuthenticationError: If not authenticated or not admin
+        """
+        response = await self._request(
+            "GET",
+            "/admin/users",
+            requires_auth=True,
+        )
+        return [UserProfileResponse.model_validate(user) for user in response.json()]
+
+    async def admin_get_user(self, username: str) -> UserProfileResponse:
+        """Admin: Get a specific user's full profile.
+
+        Args:
+            username: Username to retrieve
+
+        Returns:
+            User profile
+
+        Raises:
+            AuthenticationError: If not authenticated or not admin
+            NotFoundError: If user not found
+        """
+        response = await self._request(
+            "GET",
+            f"/admin/users/{username}",
+            requires_auth=True,
+        )
+        return UserProfileResponse.model_validate(response.json())
+
+    async def admin_update_user(
+        self, username: str, update_request: AdminUpdateUserRequest
+    ) -> UserProfileResponse:
+        """Admin: Update any user's profile fields.
+
+        Args:
+            username: Username to update
+            update_request: Fields to update
+
+        Returns:
+            Updated user profile
+
+        Raises:
+            AuthenticationError: If not authenticated or not admin
+            NotFoundError: If user not found
+            ValidationError: If update data is invalid
+        """
+        response = await self._request(
+            "PATCH",
+            f"/admin/users/{username}",
+            requires_auth=True,
+            json=update_request.model_dump(exclude_none=True),
+        )
+        return UserProfileResponse.model_validate(response.json())
+
+    async def admin_delete_user(self, username: str) -> None:
+        """Admin: Delete a user.
+
+        Args:
+            username: Username to delete
+
+        Raises:
+            AuthenticationError: If not authenticated or not admin
+            NotFoundError: If user not found
+        """
+        await self._request(
+            "DELETE",
+            f"/admin/users/{username}",
+            requires_auth=True,
+        )
+
+    async def admin_get_message(self, message_id: str) -> MessageResponse:
+        """Admin: Get a specific message by ID.
+
+        Args:
+            message_id: Message ID to retrieve
+
+        Returns:
+            Message details
+
+        Raises:
+            AuthenticationError: If not authenticated or not admin
+            NotFoundError: If message not found
+        """
+        response = await self._request(
+            "GET",
+            f"/admin/messages/{message_id}",
+            requires_auth=True,
+        )
+        return MessageResponse.model_validate(response.json())
+
+    async def admin_update_message(
+        self, message_id: str, content: str
+    ) -> MessageResponse:
+        """Admin: Update message content.
+
+        Args:
+            message_id: Message ID to update
+            content: New message content
+
+        Returns:
+            Updated message
+
+        Raises:
+            AuthenticationError: If not authenticated or not admin
+            NotFoundError: If message not found
+            ValidationError: If content is invalid
+        """
+        request = AdminMessageUpdate(content=content)
+        response = await self._request(
+            "PATCH",
+            f"/admin/messages/{message_id}",
+            requires_auth=True,
+            json=request.model_dump(),
+        )
+        return MessageResponse.model_validate(response.json())
+
+    async def admin_delete_message(self, message_id: str) -> None:
+        """Admin: Delete a message.
+
+        Args:
+            message_id: Message ID to delete
+
+        Raises:
+            AuthenticationError: If not authenticated or not admin
+            NotFoundError: If message not found
+        """
+        await self._request(
+            "DELETE",
+            f"/admin/messages/{message_id}",
+            requires_auth=True,
+        )
 
     async def health_check(self) -> dict[str, str]:
         """Check server health status.

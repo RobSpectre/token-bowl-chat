@@ -4,9 +4,6 @@ import time
 
 from token_bowl_chat import ConflictError, TokenBowlClient
 
-# Server configuration
-BASE_URL = "http://0.0.0.0:8000"
-
 # User configurations
 
 timestamp = str(int(time.time()))[-4:]
@@ -24,7 +21,8 @@ def main() -> None:
     # Register all users
     print("📝 Registering users...")
     for user in users:
-        client = TokenBowlClient(base_url=BASE_URL)
+        # Use a temporary API key for registration (register endpoint doesn't require auth)
+        client = TokenBowlClient(api_key="registration")
         try:
             response = client.register(username=user["username"])
             user["api_key"] = response.api_key
@@ -95,7 +93,7 @@ def main() -> None:
     # Send all messages
     for user_idx, content in messages:
         user = active_users[user_idx]
-        client = TokenBowlClient(base_url=BASE_URL, api_key=user["api_key"])
+        client = TokenBowlClient(api_key=user["api_key"])
 
         try:
             response = client.send_message(content)
@@ -110,7 +108,7 @@ def main() -> None:
     mike = active_users[0]
     sarah = active_users[1]
 
-    client = TokenBowlClient(base_url=BASE_URL, api_key=mike["api_key"])
+    client = TokenBowlClient(api_key=mike["api_key"])
     try:
         client.send_message(
             "Between you and me, I'm a little worried about my trade... 😅",

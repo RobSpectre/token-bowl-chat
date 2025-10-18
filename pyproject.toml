@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "token-bowl-chat"
-version = "0.1.1"
+version = "0.1.2"
 description = "A fully type-hinted Python client for the Token Bowl Chat Server API with sync and async support"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -41,9 +41,14 @@ classifiers = [
 dependencies = [
     "httpx>=0.27.0",
     "pydantic>=2.0.0",
+    "websockets>=12.0",
 ]
 
 [project.optional-dependencies]
+cli = [
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
@@ -51,6 +56,7 @@ dev = [
     "pytest-httpx>=0.30.0",
     "ruff>=0.3.0",
     "mypy>=1.8.0",
+    "tomli>=2.0.0",
 ]
 
 [project.urls]
@@ -59,6 +65,10 @@ Documentation = "https://github.com/RobSpectre/token-bowl-chat#readme"
 Repository = "https://github.com/RobSpectre/token-bowl-chat"
 Issues = "https://github.com/RobSpectre/token-bowl-chat/issues"
 Changelog = "https://github.com/RobSpectre/token-bowl-chat/blob/main/CHANGELOG.md"
+
+[project.scripts]
+token-bowl = "token_bowl_chat.cli:main"
+token-bowl-chat = "token_bowl_chat.cli:main"
 
 # Hatchling configuration
 [tool.hatch.build.targets.wheel]

@@ -13,7 +13,9 @@ from token_bowl_chat import (
 @pytest.fixture
 def async_client() -> AsyncTokenBowlClient:
     """Create a test async client."""
-    return AsyncTokenBowlClient(base_url="http://test.example.com")
+    return AsyncTokenBowlClient(
+        api_key="test-key-123", base_url="http://test.example.com"
+    )
 
 
 @pytest.mark.asyncio
@@ -108,12 +110,17 @@ async def test_get_users(
     httpx_mock.add_response(
         method="GET",
         url="http://test.example.com/users",
-        json=["alice", "bob"],
+        json=[
+            {"username": "alice", "bot": False, "viewer": False},
+            {"username": "bob", "emoji": "🤖", "bot": True, "viewer": False},
+        ],
     )
 
     users = await async_client.get_users()
 
-    assert users == ["alice", "bob"]
+    assert len(users) == 2
+    assert users[0].username == "alice"
+    assert users[1].bot is True
 
 
 @pytest.mark.asyncio
@@ -141,7 +148,9 @@ async def test_context_manager(httpx_mock: HTTPXMock) -> None:
         json={"status": "healthy"},
     )
 
-    async with AsyncTokenBowlClient(base_url="http://test.example.com") as client:
+    async with AsyncTokenBowlClient(
+        api_key="test-key-123", base_url="http://test.example.com"
+    ) as client:
         health = await client.health_check()
         assert health["status"] == "healthy"
 
@@ -149,6 +158,7 @@ async def test_context_manager(httpx_mock: HTTPXMock) -> None:
 @pytest.mark.asyncio
 async def test_no_auth_error(async_client: AsyncTokenBowlClient) -> None:
     """Test error when authentication required but not provided."""
+    async_client.api_key = None  # Clear API key to test authentication error
     with pytest.raises(AuthenticationError, match="API key required"):
         await async_client.send_message("Hello!")
 
@@ -245,9 +255,14 @@ async def test_get_online_users(
     httpx_mock.add_response(
         method="GET",
         url="http://test.example.com/users/online",
-        json=["alice", "bob"],
+        json=[
+            {"username": "alice", "bot": False, "viewer": False},
+            {"username": "bob", "bot": False, "viewer": False},
+        ],
     )
 
     users = await async_client.get_online_users()
 
-    assert users == ["alice", "bob"]
+    assert len(users) == 2
+    assert users[0].username == "alice"
+    assert users[1].username == "bob"
