@@ -211,7 +211,9 @@ def test_register_command_requires_username(runner):
     result = runner.invoke(app, ["register"])
     assert result.exit_code != 0
     # Typer may use stdout or stderr for error messages
-    output = result.stdout + result.stderr if hasattr(result, "stderr") else result.output
+    output = (
+        result.stdout + result.stderr if hasattr(result, "stderr") else result.output
+    )
     assert "Missing argument" in output or result.exit_code == 2
 
 
@@ -220,7 +222,9 @@ def test_messages_send_requires_message(runner):
     result = runner.invoke(app, ["messages", "send"])
     assert result.exit_code != 0
     # Typer may use stdout or stderr for error messages
-    output = result.stdout + result.stderr if hasattr(result, "stderr") else result.output
+    output = (
+        result.stdout + result.stderr if hasattr(result, "stderr") else result.output
+    )
     assert "Missing argument" in output or result.exit_code == 2
 
 
