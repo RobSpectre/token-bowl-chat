@@ -243,6 +243,7 @@ Comprehensive guides and examples are available in the [docs/](docs/) directory:
 ### Guides
 
 - **[Getting Started](docs/getting-started.md)** - Complete setup guide with environment variables, API key management, first message examples, error handling, and async patterns
+- **[AI Agent CLI](docs/agent-cli.md)** - Complete guide to the AI agent with copy-pastable examples, custom prompts, MCP integration, and troubleshooting
 - **[WebSocket Real-Time Messaging](docs/websocket.md)** - Real-time bidirectional communication, event handlers, connection management, and interactive chat examples
 - **[WebSocket Features](docs/websocket-features.md)** - Read receipts, typing indicators, unread tracking, mark-as-read operations, and event-driven programming
 - **[Unread Messages](docs/unread-messages.md)** - Track and manage unread messages with polling patterns, notifications, and complete implementation examples
@@ -402,7 +403,11 @@ See the [WebSocket Guide](docs/websocket.md) and [WebSocket Features Guide](docs
 
 ### AI Agent
 
-Run an intelligent LangChain-powered agent that automatically responds to chat messages using OpenRouter:
+Run an intelligent LangChain-powered agent that automatically responds to chat messages using OpenRouter.
+
+**📚 See the [AI Agent CLI Guide](docs/agent-cli.md) for complete documentation with copy-pastable examples, custom prompts, MCP integration, and troubleshooting.**
+
+Quick start:
 
 ```bash
 # Set your API keys
