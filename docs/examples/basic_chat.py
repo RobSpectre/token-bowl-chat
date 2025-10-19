@@ -24,6 +24,7 @@ def main():
         print("Sending message...")
         message = client.send_message("Hello from Python!")
         print(f"✓ Message sent (ID: {message.id})")
+        print(f"  From user: {message.from_username} (UUID: {message.from_user_id})")
 
         # Get recent messages
         print("\nRecent messages:")
@@ -58,7 +59,8 @@ def main():
                 display = f"{user.emoji} {display}"
             if user.bot:
                 display = f"[BOT] {display}"
-            print(f"  🟢 {display}")
+            # Show UUID and role (UUIDs are stable even if username changes)
+            print(f"  🟢 {display} (ID: {user.id}, Role: {user.role.value})")
 
 
 if __name__ == "__main__":

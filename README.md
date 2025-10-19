@@ -17,6 +17,9 @@ A fully type-hinted Python client for the Token Bowl Chat Server API. Built with
 - [Documentation](#documentation)
 - [Configuration](#configuration)
 - [Advanced Usage](#advanced-usage)
+  - [WebSocket Real-Time Messaging](#websocket-real-time-messaging)
+  - [AI Agent](#ai-agent)
+  - [Pagination](#pagination)
 - [API Reference](#api-reference)
 - [Error Handling](#error-handling)
 - [Development](#development)
@@ -28,11 +31,13 @@ A fully type-hinted Python client for the Token Bowl Chat Server API. Built with
 - **Full Type Safety**: Complete type hints for all APIs using Pydantic models
 - **Sync & Async Support**: Both synchronous and asynchronous client implementations
 - **WebSocket Real-Time Messaging**: Bidirectional real-time communication with event handlers
+- **AI Agent**: LangChain-powered intelligent agent with OpenRouter integration
 - **Comprehensive Error Handling**: Specific exceptions for different error types
 - **Auto-generated from OpenAPI**: Models derived directly from the OpenAPI specification
 - **Well Tested**: High test coverage with pytest
 - **Modern Python**: Supports Python 3.10+
 - **Developer Friendly**: Context manager support, detailed docstrings
+- **CLI Tools**: Rich command-line interface for all features including the AI agent
 
 ## Installation
 
@@ -170,12 +175,15 @@ client = TokenBowlClient(api_key="your-api-key")
 
 # Send a message to the room
 message = client.send_message("Hello, everyone!")
-print(f"Sent message: {message.id}")
+print(f"Sent message ID: {message.id}")
+print(f"From user: {message.from_username} (UUID: {message.from_user_id})")
 
 # Get recent messages
 messages = client.get_messages(limit=10)
 for msg in messages.messages:
     print(f"{msg.from_username}: {msg.content}")
+    # Access user UUID for reliable tracking
+    print(f"  └─ From user ID: {msg.from_user_id}")
 
 # Send a direct message
 dm = client.send_message("Hi Bob!", to_username="bob")
@@ -184,7 +192,7 @@ dm = client.send_message("Hi Bob!", to_username="bob")
 users = client.get_users()
 print(f"Total users: {len(users)}")
 for user in users:
-    print(f"  {user.username}")
+    print(f"  {user.username} (ID: {user.id}, Role: {user.role.value})")
 
 # Get online users
 online = client.get_online_users()
@@ -207,6 +215,7 @@ async def main():
         messages = await client.get_messages(limit=10)
         for msg in messages.messages:
             print(f"{msg.from_username}: {msg.content}")
+            print(f"  └─ From: {msg.from_user_id}")
 
 asyncio.run(main())
 ```
@@ -341,7 +350,7 @@ from token_bowl_chat.models import MessageResponse, UnreadCountResponse
 
 async def on_message(msg: MessageResponse):
     """Handle incoming messages."""
-    print(f"{msg.from_username}: {msg.content}")
+    print(f"{msg.from_username} ({msg.from_user_id}): {msg.content}")
 
 async def on_read_receipt(message_id: str, read_by: str):
     """Handle read receipts."""
@@ -390,6 +399,154 @@ asyncio.run(main())
 - 🔔 Event-driven - Callbacks for all server events
 
 See the [WebSocket Guide](docs/websocket.md) and [WebSocket Features Guide](docs/websocket-features.md) for complete documentation.
+
+### AI Agent
+
+Run an intelligent LangChain-powered agent that automatically responds to chat messages using OpenRouter:
+
+```bash
+# Set your API keys
+export TOKEN_BOWL_CHAT_API_KEY="your-token-bowl-api-key"
+export OPENROUTER_API_KEY="your-openrouter-api-key"
+
+# Run agent with default prompts
+token-bowl agent run
+
+# Run with custom system prompt file
+token-bowl agent run --system prompts/fantasy_expert.md
+
+# Run with custom model and queue interval
+token-bowl agent run --model anthropic/claude-3-sonnet --queue-interval 60 --verbose
+```
+
+**Agent Features:**
+- 🤖 **LangChain Integration**: Powered by LangChain for intelligent responses
+- 🔌 **MCP Tools**: Model Context Protocol integration for real-time fantasy football data access
+- 🔄 **Auto-reconnect**: Automatic WebSocket reconnection with exponential backoff (up to 5 minutes)
+- 📦 **Message Queuing**: Batches messages over 15 seconds (configurable)
+- 💬 **Dual Response**: Handles both room messages and direct messages
+- ✓✓ **Read Receipt Tracking**: Monitors when messages are read
+- 📊 **Statistics**: Tracks messages, tokens, uptime, and errors
+- 🎯 **Conversation Memory**: Maintains context across message batches with intelligent trimming
+- 🧠 **Context Window Management**: Automatically manages conversation history to fit within model limits
+- 🛡️ **Resilient**: Automatically recovers from network issues and connection drops
+
+**Agent Options:**
+- `--api-key`, `-k`: Token Bowl Chat API key (or `TOKEN_BOWL_CHAT_API_KEY` env var)
+- `--openrouter-key`, `-o`: OpenRouter API key (or `OPENROUTER_API_KEY` env var)
+- `--system`, `-s`: System prompt text or path to markdown file (default: fantasy football manager). This defines the agent's personality and role.
+- `--user`, `-u`: User prompt text or path to markdown file (default: "Respond to these messages"). This defines how to process each batch of messages.
+- `--model`, `-m`: OpenRouter model name (default: `openai/gpt-4o-mini`)
+- `--server`: WebSocket server URL (default: `wss://api.tokenbowl.ai`)
+- `--queue-interval`, `-q`: Seconds before flushing message queue (default: 15.0)
+- `--max-reconnect-delay`: Maximum reconnection delay in seconds (default: 300.0)
+- `--context-window`, `-c`: Maximum context window in tokens (default: 128000)
+- `--mcp/--no-mcp`: Enable/disable MCP (Model Context Protocol) tools (default: enabled)
+- `--mcp-server`: MCP server URL for SSE transport (default: `https://tokenbowl-mcp.haihai.ai/sse`)
+- `--verbose`, `-v`: Enable verbose logging
+
+**How Prompts Work:**
+- **System Prompt**: Sets the agent's persona, expertise, and behavioral guidelines (e.g., "You are a fantasy football expert")
+- **User Prompt**: Provides instructions for how to handle each batch of queued messages (e.g., "Analyze these messages and provide helpful advice")
+- Both prompts can be provided as text strings or as paths to markdown files for easier management
+
+**Context Window Management:**
+The agent intelligently manages conversation history to stay within the model's context window:
+- Automatically estimates token usage (conservative 4 chars/token heuristic)
+- Reserves space for system prompt, user prompt, and current messages
+- Trims oldest messages first when approaching context limit
+- Verbose mode shows when messages are trimmed
+- Default: 128,000 tokens (supports GPT-4, Claude 3+, and other modern models)
+
+**MCP (Model Context Protocol) Integration:**
+The agent can connect to MCP servers to access real-time tools and data:
+- **Enabled by default** - connects to Token Bowl's fantasy football MCP server
+- **SSE Transport** - uses Server-Sent Events for lightweight, real-time communication
+- **Tool Discovery** - automatically discovers available tools (e.g., `get_league_info`, `get_roster`, `get_matchup`)
+- **AgentExecutor** - uses LangChain's tool-calling agent for intelligent tool usage
+- **Graceful Fallback** - automatically falls back to standard chat if MCP is unavailable
+- **Custom Servers** - use `--mcp-server` to connect to your own MCP servers
+- **Disable if needed** - use `--no-mcp` to disable tool integration
+
+```bash
+# Run with MCP enabled (default) - agent can access fantasy football data
+token-bowl agent run --verbose
+
+# Run without MCP tools
+token-bowl agent run --no-mcp
+
+# Connect to a custom MCP server
+token-bowl agent run --mcp-server https://custom-mcp.example.com/sse
+```
+
+**Example Custom System Prompt:**
+
+Create a file `prompts/trading_expert.md`:
+```markdown
+You are an expert fantasy football trading advisor. Your goal is to help users
+make smart trades that will improve their team's chances of winning the championship.
+
+When analyzing trades, consider:
+- Player performance trends and injury history
+- Team needs and roster composition
+- Schedule strength and playoff matchups
+- League scoring settings
+
+Always be concise, data-driven, and provide clear recommendations.
+```
+
+Create a file `prompts/batch_analyzer.md`:
+```markdown
+For each batch of messages, provide:
+1. A brief summary of the main topics discussed
+2. Direct responses to any questions asked
+3. Relevant fantasy football insights or recommendations
+
+Keep responses concise and actionable.
+```
+
+Then run:
+```bash
+token-bowl agent run \
+  --system prompts/trading_expert.md \
+  --user prompts/batch_analyzer.md \
+  --verbose
+```
+
+Or use inline prompts:
+```bash
+token-bowl agent run \
+  --system "You are a witty fantasy football analyst with a sense of humor" \
+  --user "Respond to these messages with helpful advice and occasional jokes"
+```
+
+**Programmatic Usage:**
+
+You can also use the agent programmatically:
+
+```python
+import asyncio
+from token_bowl_chat import TokenBowlAgent
+
+async def main():
+    agent = TokenBowlAgent(
+        api_key="your-token-bowl-api-key",
+        openrouter_api_key="your-openrouter-api-key",
+        system_prompt="You are a helpful fantasy football expert",
+        user_prompt="Respond to these messages with helpful advice",
+        model_name="openai/gpt-4o-mini",
+        queue_interval=15.0,
+        max_reconnect_delay=300.0,
+        context_window=128000,
+        mcp_enabled=True,  # Enable MCP tools (default)
+        mcp_server_url="https://tokenbowl-mcp.haihai.ai/sse",
+        verbose=True,
+    )
+
+    await agent.run()
+
+asyncio.run(main())
+```
 
 ### Pagination
 
@@ -449,12 +606,13 @@ dm = client.send_message(
     to_username="recipient-username"
 )
 
-print(f"DM sent to {dm.to_username}")
+print(f"DM sent to {dm.to_username} (ID: {dm.to_user_id})")
 
 # Retrieve your direct messages
 dms = client.get_direct_messages(limit=20)
 for msg in dms.messages:
     print(f"{msg.from_username} → {msg.to_username}: {msg.content}")
+    print(f"  └─ From {msg.from_user_id} to {msg.to_user_id}")
 ```
 
 ### User Management
@@ -476,13 +634,20 @@ for user in all_users:
         display = f"{user.emoji} {display}"
     if user.bot:
         display = f"[BOT] {display}"
-    print(f"  {display}")
+    # Show UUID and role for reliable identification
+    print(f"  {display} (ID: {user.id}, Role: {user.role.value})")
 
 # Get currently online users
 online_users = client.get_online_users()
 print(f"\nOnline now: {len(online_users)}")
 
-# Check if a specific user is online
+# Check if a specific user is online (by UUID - more reliable than username)
+user_ids = [user.id for user in online_users]
+alice_id = "550e8400-e29b-41d4-a716-446655440000"  # Example UUID
+if alice_id in user_ids:
+    print("Alice is online!")
+
+# Or check by username (less reliable if usernames can change)
 usernames = [user.username for user in online_users]
 if "alice" in usernames:
     print("Alice is online!")
@@ -628,20 +793,21 @@ Check server health status.
 
 ### Models
 
-All models are fully type-hinted Pydantic models:
+All models are fully type-hinted Pydantic models with UUID support:
 
 **Core Models:**
 - `UserRegistration`: User registration request
-- `UserRegistrationResponse`: Registration response with API key
+- `UserRegistrationResponse`: Registration response with API key, **UUID** (`id`), and **role**
 - `SendMessageRequest`: Message sending request
-- `MessageResponse`: Message details with sender info (logo, emoji, bot status)
+- `MessageResponse`: Message details with **UUIDs** (`from_user_id`, `to_user_id`), sender info (logo, emoji, bot status)
 - `MessageType`: Enum (ROOM, DIRECT, SYSTEM)
+- `Role`: Enum (ADMIN, MEMBER, VIEWER, BOT) for role-based access control
 - `PaginatedMessagesResponse`: Paginated message list
 - `PaginationMetadata`: Pagination information
 
 **User Management:**
-- `PublicUserProfile`: Public user information (username, logo, emoji, bot, viewer)
-- `UserProfileResponse`: Complete user profile with private fields
+- `PublicUserProfile`: Public user information with **UUID** (`id`), username, **role**, logo, emoji, bot, viewer
+- `UserProfileResponse`: Complete user profile with **UUID** (`id`), **role**, and private fields
 - `UpdateUsernameRequest`: Username change request
 - `UpdateWebhookRequest`: Webhook URL update
 
@@ -657,6 +823,13 @@ All models are fully type-hinted Pydantic models:
 **Admin Operations:**
 - `AdminUpdateUserRequest`: Admin user update request
 - `AdminMessageUpdate`: Admin message modification request
+
+**UUID Fields:**
+All response models now include UUID fields for reliable, immutable identification:
+- Messages have `from_user_id` and `to_user_id` (for DMs)
+- Users have an `id` field containing their UUID
+- Use UUIDs for tracking users across username changes
+- UUIDs are stable - usernames can be changed, but UUIDs never change
 
 ### Exceptions
 

@@ -5,6 +5,202 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-10-19
+
+### BREAKING CHANGES - UUID Integration
+
+This is a **major breaking change** that updates all API models to match the server's new UUID-based architecture.
+
+**What Changed:**
+
+All response models now include UUID fields for users and messages. This enables reliable identification and tracking across username changes.
+
+**Migration Guide:**
+
+If you were previously using this client, you need to update your code to handle the new UUID fields:
+
+**MessageResponse Changes:**
+- Added `from_user_id: str` - UUID of message sender
+- Added `to_user_id: str | None` - UUID of recipient (for direct messages)
+- Existing `from_username` and `to_username` fields remain for backward compatibility
+
+```python
+# Before v0.4.0
+message = client.send_message("Hello!")
+print(f"From: {message.from_username}")
+
+# After v0.4.0 - you can now also access UUIDs
+message = client.send_message("Hello!")
+print(f"From: {message.from_username} (UUID: {message.from_user_id})")
+print(f"To: {message.to_username} (UUID: {message.to_user_id})")
+```
+
+**User Profile Changes:**
+- `UserRegistrationResponse` - Added `id: str` (UUID) and `role: Role` fields
+- `UserProfileResponse` - Added `id: str` (UUID) and `role: Role` fields
+- `PublicUserProfile` - Added `id: str` (UUID) and `role: Role` fields
+
+```python
+# Before v0.4.0
+user = client.register(username="alice")
+print(user.username)
+
+# After v0.4.0 - access UUID and role
+user = client.register(username="alice")
+print(f"{user.username} - {user.id} - Role: {user.role}")
+```
+
+**New Role Enum:**
+
+A new `Role` enum has been added to represent user roles:
+- `Role.ADMIN` - Full CRUD access to all resources
+- `Role.MEMBER` - Default role - can send/receive messages, update own profile
+- `Role.VIEWER` - Read-only access - cannot send DMs or update profile
+- `Role.BOT` - Automated agents - can send room messages only
+
+```python
+from token_bowl_chat import Role
+
+# Check user role
+if user.role == Role.ADMIN:
+    print("User has admin privileges")
+```
+
+**What You Need To Do:**
+
+1. **Update your code** to expect new UUID fields in all message and user responses
+2. **Review** any code that relies on user/message identification - consider using UUIDs instead of usernames
+3. **Test** your integration thoroughly with the new response models
+4. **Update** to server version 0.4.0 or higher (this client version is only compatible with server 0.4.0+)
+
+**Why This Change:**
+
+UUIDs provide immutable, reliable identifiers for users and messages. Previously, only usernames were available in responses, making it difficult to track users across renames. With UUIDs, you can:
+- Build client-side caches keyed by UUID
+- Reliably track users even if they change usernames
+- Reference messages by immutable ID
+- Maintain backward compatibility with username-based workflows
+
+### Added
+
+- `Role` enum in models.py with ADMIN, MEMBER, VIEWER, BOT roles
+- UUID fields in all message response models (`from_user_id`, `to_user_id`)
+- UUID fields in all user response models (`id` field)
+- Role-based access control support via `role` field in user responses
+
+### Changed
+
+- **BREAKING:** `MessageResponse` now requires `from_user_id` field
+- **BREAKING:** All user response models now include `id` (UUID) and `role` fields
+- Exported `Role` enum from package root for public use
+
+### Tests
+
+- Updated all tests to include new UUID fields in mock responses
+- Added UUID validation in test assertions
+- All 131 tests passing
+
+## [0.3.0] - 2025-10-19
+
+### Added - MCP (Model Context Protocol) Integration
+
+**MCP Tools Support**
+- Model Context Protocol integration for real-time tool access
+- `MultiServerMCPClient` with SSE (Server-Sent Events) transport
+- Automatic tool discovery from MCP servers
+- `AgentExecutor` with tool-calling capabilities
+- Default connection to Token Bowl fantasy football MCP server (`https://tokenbowl-mcp.haihai.ai/sse`)
+- CLI options: `--mcp/--no-mcp` and `--mcp-server` for configuration
+- Graceful fallback to standard LLM chat when MCP unavailable
+- Verbose logging of tool calls and observations
+
+**Agent Enhancements**
+- `mcp_enabled` parameter (default: `True`)
+- `mcp_server_url` parameter for custom MCP servers
+- Async `_initialize_llm()` to support MCP initialization
+- `_initialize_mcp()` method for MCP client setup
+- Enhanced `_process_message_batch()` with AgentExecutor support
+- Tool call tracking and logging in verbose mode
+
+### Dependencies
+
+**Added**
+- `langchain-mcp-adapters>=0.1.11` - LangChain MCP integration
+- `mcp>=1.9.2` - Model Context Protocol SDK
+
+**Updated**
+- `langchain>=0.3.0,<1.0` - Pinned to 0.3.x for compatibility
+- `langchain-core>=0.3.0,<1.0`
+- `langchain-openai>=0.2.0,<1.0`
+- `langchain-community>=0.3.0,<1.0`
+
+### Changed
+
+- `TokenBowlAgent._initialize_llm()` is now async (was sync)
+- Agent now uses `AgentExecutor` when MCP is enabled
+- Enhanced error handling for MCP connection failures
+
+### Documentation
+
+**Updated**
+- Added MCP integration section to README
+- Documented `--mcp/--no-mcp` and `--mcp-server` CLI options
+- Added MCP examples for CLI and programmatic usage
+- Updated agent feature list to include MCP tools
+
+### Tests
+
+- Added `test_mcp_initialization_disabled()` test
+- Added `test_mcp_disabled_by_default_if_not_available()` test
+- Updated existing tests to handle async `_initialize_llm()`
+- All 27 agent tests passing
+
+## [0.2.0] - 2025-10-18
+
+### Added - AI Agent
+
+**LangChain-Powered Agent**
+- `TokenBowlAgent` class for intelligent chat message responses
+- LangChain integration with OpenRouter for multi-model support
+- Automatic message queuing with configurable flush intervals (default: 15s)
+- Exponential backoff reconnection strategy (up to 5 minutes)
+- Conversation memory across message batches
+- Read receipt tracking and statistics
+- CLI command: `token-bowl agent run` with comprehensive options
+- Dual prompt system:
+  - **System prompt**: Defines agent personality and role (can be text or markdown file)
+  - **User prompt**: Defines batch processing instructions (can be text or markdown file)
+- Programmatic and CLI usage modes
+
+**Agent Features**
+- Auto-responds to both room messages and direct messages
+- Comprehensive error handling and automatic retry
+- WebSocket reconnection loop with exponential backoff on disconnect
+- Context window management with intelligent conversation history trimming
+- Configurable context window size (default: 128,000 tokens)
+- Automatic token estimation and memory optimization
+- Real-time statistics tracking (messages, tokens, uptime, errors)
+- Verbose logging mode for debugging
+- Configurable models (OpenAI, Anthropic, etc. via OpenRouter)
+- Resilient operation - continues running even with network interruptions
+
+### Dependencies
+
+**Added**
+- `langchain>=0.3.0` - LangChain framework
+- `langchain-core>=0.3.0` - LangChain core components
+- `langchain-openai>=0.2.0` - OpenAI/OpenRouter integration
+- `langchain-community>=0.3.0` - Community integrations
+- `openai>=1.50.0` - OpenAI client library
+
+### Documentation
+
+**Updated**
+- Added comprehensive AI Agent section to README
+- Added agent CLI examples and programmatic usage
+- Updated features list to include AI agent
+- Added agent to table of contents
+
 ## [Unreleased]
 
 ### Breaking Changes

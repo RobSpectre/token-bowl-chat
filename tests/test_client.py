@@ -25,17 +25,24 @@ def test_register_success(httpx_mock: HTTPXMock, client: TokenBowlClient) -> Non
         method="POST",
         url="http://test.example.com/register",
         json={
+            "id": "550e8400-e29b-41d4-a716-446655440000",
             "username": "alice",
             "api_key": "test-key-123",
+            "role": "member",
             "webhook_url": None,
+            "viewer": False,
+            "admin": False,
+            "bot": False,
         },
         status_code=201,
     )
 
     response = client.register(username="alice")
 
+    assert response.id == "550e8400-e29b-41d4-a716-446655440000"
     assert response.username == "alice"
     assert response.api_key == "test-key-123"
+    assert response.role.value == "member"
     assert response.webhook_url is None
 
 
@@ -46,9 +53,14 @@ def test_register_with_webhook(httpx_mock: HTTPXMock, client: TokenBowlClient) -
         method="POST",
         url="http://test.example.com/register",
         json={
+            "id": "550e8400-e29b-41d4-a716-446655440001",
             "username": "bob",
             "api_key": "test-key-456",
+            "role": "member",
             "webhook_url": webhook_url,
+            "viewer": False,
+            "admin": False,
+            "bot": False,
         },
         status_code=201,
     )
@@ -80,6 +92,7 @@ def test_send_message_room(httpx_mock: HTTPXMock, client: TokenBowlClient) -> No
         url="http://test.example.com/messages",
         json={
             "id": "msg-1",
+            "from_user_id": "550e8400-e29b-41d4-a716-446655440000",
             "from_username": "alice",
             "to_username": None,
             "content": "Hello, room!",
@@ -92,6 +105,7 @@ def test_send_message_room(httpx_mock: HTTPXMock, client: TokenBowlClient) -> No
     response = client.send_message("Hello, room!")
 
     assert response.id == "msg-1"
+    assert response.from_user_id == "550e8400-e29b-41d4-a716-446655440000"
     assert response.from_username == "alice"
     assert response.to_username is None
     assert response.content == "Hello, room!"
@@ -106,7 +120,9 @@ def test_send_message_direct(httpx_mock: HTTPXMock, client: TokenBowlClient) -> 
         url="http://test.example.com/messages",
         json={
             "id": "msg-2",
+            "from_user_id": "550e8400-e29b-41d4-a716-446655440000",
             "from_username": "alice",
+            "to_user_id": "550e8400-e29b-41d4-a716-446655440001",
             "to_username": "bob",
             "content": "Hello, Bob!",
             "message_type": "direct",
@@ -117,6 +133,7 @@ def test_send_message_direct(httpx_mock: HTTPXMock, client: TokenBowlClient) -> 
 
     response = client.send_message("Hello, Bob!", to_username="bob")
 
+    assert response.to_user_id == "550e8400-e29b-41d4-a716-446655440001"
     assert response.to_username == "bob"
     assert response.message_type == MessageType.DIRECT
 
@@ -154,6 +171,7 @@ def test_get_messages(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
             "messages": [
                 {
                     "id": "msg-1",
+                    "from_user_id": "550e8400-e29b-41d4-a716-446655440000",
                     "from_username": "alice",
                     "to_username": None,
                     "content": "Hello!",
@@ -214,7 +232,9 @@ def test_get_direct_messages(httpx_mock: HTTPXMock, client: TokenBowlClient) -> 
             "messages": [
                 {
                     "id": "msg-dm-1",
+                    "from_user_id": "550e8400-e29b-41d4-a716-446655440001",
                     "from_username": "bob",
+                    "to_user_id": "550e8400-e29b-41d4-a716-446655440000",
                     "to_username": "alice",
                     "content": "Private message",
                     "message_type": "direct",
@@ -243,17 +263,19 @@ def test_get_users(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
         method="GET",
         url="http://test.example.com/users",
         json=[
-            {"username": "alice", "logo": "claude.png", "bot": False, "viewer": False},
-            {"username": "bob", "emoji": "🤖", "bot": True, "viewer": False},
-            {"username": "charlie", "bot": False, "viewer": False},
+            {"id": "550e8400-e29b-41d4-a716-446655440000", "username": "alice", "role": "member", "logo": "claude.png", "bot": False, "viewer": False},
+            {"id": "550e8400-e29b-41d4-a716-446655440001", "username": "bob", "role": "bot", "emoji": "🤖", "bot": True, "viewer": False},
+            {"id": "550e8400-e29b-41d4-a716-446655440002", "username": "charlie", "role": "member", "bot": False, "viewer": False},
         ],
     )
 
     users = client.get_users()
 
     assert len(users) == 3
+    assert users[0].id == "550e8400-e29b-41d4-a716-446655440000"
     assert users[0].username == "alice"
     assert users[0].logo == "claude.png"
+    assert users[1].id == "550e8400-e29b-41d4-a716-446655440001"
     assert users[1].username == "bob"
     assert users[1].emoji == "🤖"
     assert users[1].bot is True
@@ -266,8 +288,8 @@ def test_get_online_users(httpx_mock: HTTPXMock, client: TokenBowlClient) -> Non
         method="GET",
         url="http://test.example.com/users/online",
         json=[
-            {"username": "alice", "logo": "claude.png", "bot": False, "viewer": False},
-            {"username": "bob", "bot": False, "viewer": False},
+            {"id": "550e8400-e29b-41d4-a716-446655440000", "username": "alice", "role": "member", "logo": "claude.png", "bot": False, "viewer": False},
+            {"id": "550e8400-e29b-41d4-a716-446655440001", "username": "bob", "role": "member", "bot": False, "viewer": False},
         ],
     )
 
@@ -350,10 +372,15 @@ def test_register_with_logo(httpx_mock: HTTPXMock, client: TokenBowlClient) -> N
         method="POST",
         url="http://test.example.com/register",
         json={
+            "id": "550e8400-e29b-41d4-a716-446655440000",
             "username": "alice",
             "api_key": "test-key-123",
+            "role": "member",
             "webhook_url": None,
             "logo": "claude-color.png",
+            "viewer": False,
+            "admin": False,
+            "bot": False,
         },
         status_code=201,
     )

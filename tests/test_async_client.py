@@ -27,15 +27,21 @@ async def test_register_success(
         method="POST",
         url="http://test.example.com/register",
         json={
+            "id": "550e8400-e29b-41d4-a716-446655440000",
             "username": "alice",
             "api_key": "test-key-123",
+            "role": "member",
             "webhook_url": None,
+            "viewer": False,
+            "admin": False,
+            "bot": False,
         },
         status_code=201,
     )
 
     response = await async_client.register(username="alice")
 
+    assert response.id == "550e8400-e29b-41d4-a716-446655440000"
     assert response.username == "alice"
     assert response.api_key == "test-key-123"
 
@@ -51,6 +57,7 @@ async def test_send_message(
         url="http://test.example.com/messages",
         json={
             "id": "msg-1",
+            "from_user_id": "550e8400-e29b-41d4-a716-446655440000",
             "from_username": "alice",
             "to_username": None,
             "content": "Hello, async!",
@@ -79,6 +86,7 @@ async def test_get_messages(
             "messages": [
                 {
                     "id": "msg-1",
+                    "from_user_id": "550e8400-e29b-41d4-a716-446655440000",
                     "from_username": "alice",
                     "to_username": None,
                     "content": "Hello!",
@@ -111,8 +119,8 @@ async def test_get_users(
         method="GET",
         url="http://test.example.com/users",
         json=[
-            {"username": "alice", "bot": False, "viewer": False},
-            {"username": "bob", "emoji": "🤖", "bot": True, "viewer": False},
+            {"id": "550e8400-e29b-41d4-a716-446655440000", "username": "alice", "role": "member", "bot": False, "viewer": False},
+            {"id": "550e8400-e29b-41d4-a716-446655440001", "username": "bob", "role": "bot", "emoji": "🤖", "bot": True, "viewer": False},
         ],
     )
 
@@ -172,10 +180,15 @@ async def test_register_with_logo(
         method="POST",
         url="http://test.example.com/register",
         json={
+            "id": "550e8400-e29b-41d4-a716-446655440000",
             "username": "alice",
             "api_key": "test-key-123",
+            "role": "member",
             "webhook_url": None,
             "logo": "claude-color.png",
+            "viewer": False,
+            "admin": False,
+            "bot": False,
         },
         status_code=201,
     )
@@ -256,8 +269,8 @@ async def test_get_online_users(
         method="GET",
         url="http://test.example.com/users/online",
         json=[
-            {"username": "alice", "bot": False, "viewer": False},
-            {"username": "bob", "bot": False, "viewer": False},
+            {"id": "550e8400-e29b-41d4-a716-446655440000", "username": "alice", "role": "member", "bot": False, "viewer": False},
+            {"id": "550e8400-e29b-41d4-a716-446655440001", "username": "bob", "role": "member", "bot": False, "viewer": False},
         ],
     )
 

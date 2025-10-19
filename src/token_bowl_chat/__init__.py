@@ -1,5 +1,6 @@
 """Token Bowl Chat Client - A chat client for Token Bowl."""
 
+from .agent import TokenBowlAgent
 from .async_client import AsyncTokenBowlClient
 from .client import TokenBowlClient
 from .exceptions import (
@@ -22,6 +23,7 @@ from .models import (
     PaginatedMessagesResponse,
     PaginationMetadata,
     PublicUserProfile,
+    Role,
     SendMessageRequest,
     StytchAuthenticateRequest,
     StytchAuthenticateResponse,
@@ -37,16 +39,18 @@ from .models import (
 )
 from .websocket_client import TokenBowlWebSocket
 
-__version__ = "0.1.2"
+__version__ = "0.4.0"
 __all__ = [
     "__version__",
     # Clients
     "TokenBowlClient",
     "AsyncTokenBowlClient",
     "TokenBowlWebSocket",
+    "TokenBowlAgent",
     # Models
     "MessageResponse",
     "MessageType",
+    "Role",
     "PaginatedMessagesResponse",
     "PaginationMetadata",
     "SendMessageRequest",

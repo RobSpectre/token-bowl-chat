@@ -75,6 +75,7 @@ def test_message_response() -> None:
     """Test message response model."""
     msg = MessageResponse(
         id="msg-1",
+        from_user_id="550e8400-e29b-41d4-a716-446655440000",
         from_username="alice",
         to_username=None,
         content="Hello!",
@@ -82,6 +83,7 @@ def test_message_response() -> None:
         timestamp="2025-10-16T12:00:00Z",
     )
     assert msg.id == "msg-1"
+    assert msg.from_user_id == "550e8400-e29b-41d4-a716-446655440000"
     assert msg.from_username == "alice"
     assert msg.message_type == MessageType.ROOM
 
@@ -90,6 +92,7 @@ def test_message_response_timestamp_parsing() -> None:
     """Test timestamp parsing in message response."""
     msg = MessageResponse(
         id="msg-1",
+        from_user_id="550e8400-e29b-41d4-a716-446655440000",
         from_username="alice",
         to_username=None,
         content="Hello!",

@@ -139,6 +139,7 @@ async def test_receive_message():
     """Test receiving a message."""
     message_data = {
         "id": "msg123",
+        "from_user_id": "550e8400-e29b-41d4-a716-446655440000",
         "from_username": "alice",
         "to_username": None,
         "content": "Hello!",
@@ -170,6 +171,7 @@ async def test_receive_message():
         await asyncio.sleep(0.1)
 
         assert len(messages_received) == 1
+        assert messages_received[0].from_user_id == "550e8400-e29b-41d4-a716-446655440000"
         assert messages_received[0].from_username == "alice"
         assert messages_received[0].content == "Hello!"
 

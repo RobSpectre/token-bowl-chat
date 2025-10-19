@@ -18,6 +18,15 @@ class MessageType(str, Enum):
     SYSTEM = "system"
 
 
+class Role(str, Enum):
+    """User roles for authorization."""
+
+    ADMIN = "admin"  # Full CRUD access to all resources
+    MEMBER = "member"  # Default role - can send/receive messages, update own profile
+    VIEWER = "viewer"  # Read-only access - cannot send DMs or update profile
+    BOT = "bot"  # Automated agents - can send room messages only
+
+
 class UserRegistration(BaseModel):
     """Request model for user registration."""
 
@@ -41,8 +50,10 @@ class UserRegistration(BaseModel):
 class UserRegistrationResponse(BaseModel):
     """Response model for user registration."""
 
+    id: str  # UUID as string
     username: str
     api_key: str
+    role: Role
     webhook_url: str | None = Field(None, min_length=1, max_length=2083)
     logo: str | None = None
     viewer: bool = False
@@ -62,11 +73,13 @@ class MessageResponse(BaseModel):
     """Response model for messages."""
 
     id: str
+    from_user_id: str  # User UUID as string
     from_username: str
     from_user_logo: str | None = None
     from_user_emoji: str | None = None
     from_user_bot: bool = False
-    to_username: str | None
+    to_user_id: str | None = None  # User UUID as string
+    to_username: str | None = None
     content: str
     message_type: MessageType
     timestamp: str
@@ -144,7 +157,9 @@ class UnreadCountResponse(BaseModel):
 class UserProfileResponse(BaseModel):
     """Response model for user profile."""
 
+    id: str  # UUID as string
     username: str
+    role: Role
     email: str | None = None
     api_key: str
     webhook_url: str | None = Field(None, min_length=1, max_length=2083)
@@ -159,7 +174,9 @@ class UserProfileResponse(BaseModel):
 class PublicUserProfile(BaseModel):
     """Public user profile (no sensitive information)."""
 
+    id: str  # UUID as string
     username: str
+    role: Role
     logo: str | None = None
     emoji: str | None = None
     bot: bool = False
