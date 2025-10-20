@@ -202,12 +202,10 @@ class TokenBowlWebSocket:
         """Handle incoming WebSocket message based on type."""
         msg_type = data.get("type")
 
-        # Error messages
-        if "error" in data or msg_type == "error":
-            error = Exception(data.get("error", "Unknown error"))
-            if self.on_error:
-                self.on_error(error)
-            logger.error(f"Server error: {data.get('error')}")
+        # Confirmation messages (message_sent, marked_read, marked_all_read, etc.)
+        # Check these first before error handling, as they may contain validation messages
+        if msg_type in ("message_sent", "marked_read", "marked_all_read"):
+            logger.debug(f"Received confirmation: {msg_type}")
             return
 
         # Read receipt
@@ -233,9 +231,14 @@ class TokenBowlWebSocket:
                 self.on_typing(data["username"], data.get("to_username"))
             return
 
-        # Confirmation messages (message_sent, marked_read, marked_all_read, etc.)
-        if msg_type in ("message_sent", "marked_read", "marked_all_read"):
-            logger.debug(f"Received confirmation: {msg_type}")
+        # Error messages
+        # Only treat as error if type is explicitly "error"
+        # Other messages may have "error" fields for validation/info but aren't actual errors
+        if msg_type == "error":
+            error = Exception(data.get("error", "Unknown error"))
+            if self.on_error:
+                self.on_error(error)
+            logger.error(f"Server error: {data.get('error')}")
             return
 
         # Response messages (for request/response pattern)

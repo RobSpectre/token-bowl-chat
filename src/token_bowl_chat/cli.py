@@ -48,11 +48,13 @@ messages_app = typer.Typer(help="📨 Send and manage messages")
 users_app = typer.Typer(help="👥 Manage users and profiles")
 unread_app = typer.Typer(help="📬 Track and manage unread messages")
 live_app = typer.Typer(help="⚡ Real-time WebSocket features")
+agent_app = typer.Typer(help="🤖 AI agent features")
 
 app.add_typer(messages_app, name="messages")
 app.add_typer(users_app, name="users")
 app.add_typer(unread_app, name="unread")
 app.add_typer(live_app, name="live")
+app.add_typer(agent_app, name="agent")
 
 
 # Global options
@@ -652,6 +654,145 @@ async def _run_monitor(api_key: str) -> None:
             await asyncio.Event().wait()
 
         console.print(f"\n[bold]Total messages received:[/bold] {message_count}")
+
+
+# ============================================================================
+# AGENT COMMANDS
+# ============================================================================
+
+
+@agent_app.command("run")
+def run_agent(
+    api_key: str | None = typer.Option(
+        None,
+        "--api-key",
+        "-k",
+        envvar="TOKEN_BOWL_CHAT_API_KEY",
+        help="Token Bowl Chat API key",
+    ),
+    openrouter_api_key: str | None = typer.Option(
+        None,
+        "--openrouter-key",
+        "-o",
+        envvar="OPENROUTER_API_KEY",
+        help="OpenRouter API key",
+    ),
+    system: str | None = typer.Option(
+        None,
+        "--system",
+        "-s",
+        help="System prompt (agent personality) - text or path to markdown file",
+    ),
+    user: str | None = typer.Option(
+        None,
+        "--user",
+        "-u",
+        help="User prompt (batch processing instructions) - text or path to markdown file",
+    ),
+    model: str = typer.Option(
+        "openai/gpt-4o-mini", "--model", "-m", help="OpenRouter model name"
+    ),
+    server: str = typer.Option(
+        "wss://api.tokenbowl.ai", "--server", help="WebSocket server URL"
+    ),
+    queue_interval: float = typer.Option(
+        15.0,
+        "--queue-interval",
+        "-q",
+        help="Seconds to wait before flushing message queue",
+    ),
+    max_reconnect_delay: float = typer.Option(
+        300.0,
+        "--max-reconnect-delay",
+        help="Maximum delay between reconnection attempts (seconds)",
+    ),
+    context_window: int = typer.Option(
+        128000,
+        "--context-window",
+        "-c",
+        help="Maximum context window in tokens for conversation history",
+    ),
+    mcp_enabled: bool = typer.Option(
+        True,
+        "--mcp/--no-mcp",
+        help="Enable/disable MCP (Model Context Protocol) tools",
+    ),
+    mcp_server_url: str = typer.Option(
+        "https://tokenbowl-mcp.haihai.ai/sse",
+        "--mcp-server",
+        help="MCP server URL (SSE transport)",
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose logging"
+    ),
+) -> None:
+    """🤖 Run an AI agent that responds to chat messages.
+
+    The agent connects to the Token Bowl Chat server via WebSocket, queues incoming
+    messages, and uses LangChain with OpenRouter to generate intelligent responses.
+
+    Features:
+    - Automatic reconnection with exponential backoff (up to 5 minutes)
+    - Message queuing with configurable flush interval (default: 30 seconds)
+    - Responds to both room messages and direct messages
+    - Read receipt tracking
+    - Comprehensive error handling and statistics
+
+    Example:
+        # Run with default prompts
+        $ token-bowl agent run
+
+        # Run with custom system prompt file
+        $ token-bowl agent run --system prompts/fantasy_expert.md
+
+        # Run with custom model and queue interval
+        $ token-bowl agent run --model anthropic/claude-3-sonnet --queue-interval 60
+    """
+    from token_bowl_chat.agent import TokenBowlAgent
+
+    # Validate API keys
+    if not api_key:
+        console.print(
+            "[bold red]Error:[/bold red] No Token Bowl Chat API key provided.\n"
+            "Set TOKEN_BOWL_CHAT_API_KEY or use --api-key"
+        )
+        raise typer.Exit(1)
+
+    if not openrouter_api_key:
+        console.print(
+            "[bold red]Error:[/bold red] No OpenRouter API key provided.\n"
+            "Set OPENROUTER_API_KEY or use --openrouter-key"
+        )
+        raise typer.Exit(1)
+
+    # Create and run agent
+    try:
+        agent = TokenBowlAgent(
+            api_key=api_key,
+            openrouter_api_key=openrouter_api_key,
+            system_prompt=system,
+            user_prompt=user,
+            model_name=model,
+            server_url=server,
+            queue_interval=queue_interval,
+            max_reconnect_delay=max_reconnect_delay,
+            context_window=context_window,
+            mcp_enabled=mcp_enabled,
+            mcp_server_url=mcp_server_url,
+            verbose=verbose,
+        )
+
+        asyncio.run(agent.run())
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Agent stopped by user[/yellow]")
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        if verbose:
+            import traceback
+
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        raise typer.Exit(1) from e
 
 
 # ============================================================================

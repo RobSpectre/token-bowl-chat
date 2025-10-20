@@ -181,7 +181,7 @@ async def test_receive_message():
 @pytest.mark.asyncio
 async def test_receive_error_message():
     """Test receiving an error message from server."""
-    error_data = {"error": "Something went wrong"}
+    error_data = {"type": "error", "error": "Something went wrong"}
 
     errors_received = []
 
