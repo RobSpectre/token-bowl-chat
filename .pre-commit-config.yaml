@@ -1,0 +1,39 @@
+# Pre-commit hooks to run CI checks locally before committing
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Ruff - Fast Python linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      # Run the formatter (same as CI)
+      - id: ruff-format
+        name: ruff format
+      # Run the linter (same as CI)
+      - id: ruff
+        name: ruff check
+        args: [--fix, --exit-non-zero-on-fix]
+
+  # Local hooks for running type checks and tests
+  - repo: local
+    hooks:
+      # Run mypy type checking (same as CI)
+      - id: mypy
+        name: mypy type check
+        entry: mypy
+        args: [src]
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      # Run pytest (same as CI)
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]

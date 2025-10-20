@@ -1,16 +1,17 @@
-.PHONY: help lint format-check type-check test ci clean install
+.PHONY: help lint format-check type-check test ci clean install pre-commit-install
 
 # Default target - show help
 help:
 	@echo "Available targets:"
-	@echo "  make ci              - Run all CI checks (lint, type-check, test)"
-	@echo "  make lint            - Run ruff linting checks"
-	@echo "  make format-check    - Check code formatting with ruff"
-	@echo "  make format          - Auto-format code with ruff"
-	@echo "  make type-check      - Run mypy type checking"
-	@echo "  make test            - Run pytest with coverage"
-	@echo "  make install         - Install package with dev dependencies"
-	@echo "  make clean           - Remove build artifacts and caches"
+	@echo "  make ci                  - Run all CI checks (lint, type-check, test)"
+	@echo "  make lint                - Run ruff linting checks"
+	@echo "  make format-check        - Check code formatting with ruff"
+	@echo "  make format              - Auto-format code with ruff"
+	@echo "  make type-check          - Run mypy type checking"
+	@echo "  make test                - Run pytest with coverage"
+	@echo "  make install             - Install package with dev dependencies"
+	@echo "  make pre-commit-install  - Install pre-commit hooks"
+	@echo "  make clean               - Remove build artifacts and caches"
 
 # Install dependencies (same as CI)
 install:
@@ -47,6 +48,20 @@ format:
 ci: format-check lint type-check test
 	@echo ""
 	@echo "✓ All CI checks passed!"
+
+# Install pre-commit hooks
+pre-commit-install:
+	@echo "==> Installing pre-commit hooks..."
+	pre-commit install
+	@echo "✓ Pre-commit hooks installed!"
+	@echo ""
+	@echo "The following checks will now run automatically before each commit:"
+	@echo "  - Ruff formatting"
+	@echo "  - Ruff linting"
+	@echo "  - Mypy type checking"
+	@echo "  - Pytest"
+	@echo ""
+	@echo "To run manually: pre-commit run --all-files"
 
 # Clean build artifacts
 clean:

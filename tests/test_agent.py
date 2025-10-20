@@ -38,14 +38,14 @@ class TestMessageQueueItem:
 
     def test_queue_item_creation(self):
         """Test creating a message queue item."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         item = MessageQueueItem(
             message_id="test-123",
             content="Hello world",
             from_username="alice",
             to_username="bob",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             is_direct=True,
         )
         assert item.message_id == "test-123"
@@ -328,7 +328,12 @@ class TestTokenBowlAgent:
             timestamp="2025-10-19T12:00:00Z",
         )
 
-        with patch("asyncio.create_task") as mock_create_task:
+        # Create a side effect that closes the coroutine to avoid warnings
+        def close_coro(coro):
+            coro.close()
+            return MagicMock()
+
+        with patch("asyncio.create_task", side_effect=close_coro) as mock_create_task:
             agent._on_message(msg)
 
             # Verify message was queued
@@ -359,7 +364,12 @@ class TestTokenBowlAgent:
             timestamp="2025-10-19T12:00:00Z",
         )
 
-        with patch("asyncio.create_task") as mock_create_task:
+        # Create a side effect that closes the coroutine to avoid warnings
+        def close_coro(coro):
+            coro.close()
+            return MagicMock()
+
+        with patch("asyncio.create_task", side_effect=close_coro) as mock_create_task:
             agent._on_message(msg)
 
             # Verify DM was queued
@@ -432,7 +442,7 @@ class TestTokenBowlAgent:
     @pytest.mark.asyncio
     async def test_process_message_batch_updates_history(self):
         """Test processing messages updates conversation history."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         agent = TokenBowlAgent(
             api_key="test", openrouter_api_key="test-key", mcp_enabled=False
@@ -456,7 +466,7 @@ class TestTokenBowlAgent:
                 content="Hello",
                 from_username="alice",
                 to_username=None,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 is_direct=False,
             )
         ]
@@ -480,7 +490,7 @@ class TestTokenBowlAgent:
     @pytest.mark.asyncio
     async def test_process_message_batch_strips_whitespace(self):
         """Test that LLM responses have leading/trailing whitespace stripped."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         agent = TokenBowlAgent(
             api_key="test", openrouter_api_key="test-key", mcp_enabled=False
@@ -504,7 +514,7 @@ class TestTokenBowlAgent:
                 content="Hello",
                 from_username="alice",
                 to_username=None,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 is_direct=False,
             )
         ]

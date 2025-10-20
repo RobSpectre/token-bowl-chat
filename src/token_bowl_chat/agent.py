@@ -10,7 +10,7 @@ import os
 import random
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -61,11 +61,11 @@ class AgentStats:
     reconnections: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
-    start_time: datetime = field(default_factory=datetime.utcnow)
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def uptime(self) -> str:
         """Get uptime as a formatted string."""
-        delta = datetime.utcnow() - self.start_time
+        delta = datetime.now(timezone.utc) - self.start_time
         hours, remainder = divmod(int(delta.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{hours}h {minutes}m {seconds}s"
@@ -131,7 +131,7 @@ class TokenBowlAgent:
         # Message queue and processing
         self.message_queue: deque[MessageQueueItem] = deque()
         self.processing_lock = asyncio.Lock()
-        self.last_flush_time = datetime.utcnow()
+        self.last_flush_time = datetime.now(timezone.utc)
 
         # WebSocket and reconnection state
         self.ws: TokenBowlWebSocket | None = None
@@ -639,7 +639,7 @@ class TokenBowlAgent:
 
                 # Check if it's time to flush
                 time_since_last_flush = (
-                    datetime.utcnow() - self.last_flush_time
+                    datetime.now(timezone.utc) - self.last_flush_time
                 ).total_seconds()
 
                 if time_since_last_flush >= self.queue_interval and self.message_queue:
@@ -651,7 +651,7 @@ class TokenBowlAgent:
                         if messages_to_process:
                             await self._process_message_batch(messages_to_process)
 
-                        self.last_flush_time = datetime.utcnow()
+                        self.last_flush_time = datetime.now(timezone.utc)
 
             except Exception as e:
                 self.stats.errors += 1

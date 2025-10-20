@@ -870,19 +870,62 @@ except ValidationError as e:
 
 ## Development
 
+### Running CI Checks Locally
+
+Run all the same checks that run in CI:
+
+```bash
+make ci
+```
+
+This runs format checking, linting, type checking, and tests in sequence.
+
+### Pre-commit Hooks (Recommended)
+
+Install pre-commit hooks to automatically run CI checks before each commit:
+
+```bash
+# Install pre-commit hooks
+make pre-commit-install
+
+# Or manually
+pip install pre-commit
+pre-commit install
+```
+
+The hooks will automatically:
+- Format code with ruff
+- Check and fix linting issues
+- Run type checking with mypy
+- Run all tests
+
 ### Running tests
 
 ```bash
+# Run all tests
 pytest
-```
 
-### Running tests with coverage
-
-```bash
+# Run tests with coverage
 pytest --cov=token_bowl_chat --cov-report=html
 ```
 
 ### Linting and formatting
+
+```bash
+# Check code quality
+make lint
+
+# Check formatting
+make format-check
+
+# Auto-format code
+make format
+
+# Type checking
+make type-check
+```
+
+### Manual checks
 
 ```bash
 # Check code quality
@@ -893,11 +936,7 @@ ruff format .
 
 # Type checking
 mypy src
-```
 
-### Auto-fix issues
-
-```bash
 # Fix auto-fixable linting issues
 ruff check --fix .
 ```

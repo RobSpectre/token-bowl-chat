@@ -188,10 +188,48 @@ Before committing, ensure:
 3. ✅ Code is formatted: `ruff format .`
 4. ✅ Type checking passes: `mypy src`
 
-You can run all checks at once:
+You can run all checks at once using the Makefile:
+
+```bash
+make ci
+```
+
+Or run them manually:
 
 ```bash
 pytest && ruff check . && ruff format . && mypy src
+```
+
+### Automated Pre-commit Hooks (Recommended)
+
+To automatically run all CI checks before each commit, install the pre-commit hooks:
+
+```bash
+# Install pre-commit (if not already installed)
+pip install pre-commit
+
+# Install the git hooks
+pre-commit install
+```
+
+Now the following checks will run automatically before each commit:
+- ✅ **Ruff formatting** - Auto-formats your code
+- ✅ **Ruff linting** - Checks and fixes linting issues
+- ✅ **Mypy type checking** - Validates type annotations
+- ✅ **Pytest** - Runs all tests
+
+If any check fails, the commit will be blocked until you fix the issues.
+
+**Manual run:**
+To manually run pre-commit on all files:
+```bash
+pre-commit run --all-files
+```
+
+**Skip hooks (emergency only):**
+If you need to commit without running hooks (not recommended):
+```bash
+git commit --no-verify -m "Your message"
 ```
 
 ## Submitting Changes
