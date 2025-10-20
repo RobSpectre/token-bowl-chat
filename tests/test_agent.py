@@ -1,8 +1,6 @@
 """Tests for the TokenBowlAgent class."""
 
-import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -181,7 +179,9 @@ class TestTokenBowlAgent:
     def test_trim_conversation_history_exceeds_limit(self):
         """Test trimming when history exceeds context window."""
         agent = TokenBowlAgent(
-            api_key="test", openrouter_api_key="test", context_window=1000  # Small
+            api_key="test",
+            openrouter_api_key="test",
+            context_window=1000,  # Small
         )
 
         # Add many large messages
@@ -288,8 +288,8 @@ class TestTokenBowlAgent:
         """Test _on_message ignores messages sent by the agent."""
         agent = TokenBowlAgent(api_key="test", openrouter_api_key="test")
 
-        # Track a sent message
-        agent.sent_messages["msg-123"] = "My message"
+        # Track a sent message content (this happens before sending)
+        agent.sent_message_contents.append("My message")
 
         msg = MessageResponse(
             id="msg-123",
@@ -306,6 +306,8 @@ class TestTokenBowlAgent:
 
         # Should not queue own message
         assert len(agent.message_queue) == 0
+        # Should track the message ID after receiving the echo
+        assert agent.sent_messages["msg-123"] == "My message"
 
     def test_on_message_marks_as_read(self):
         """Test _on_message marks messages as read."""
@@ -369,9 +371,7 @@ class TestTokenBowlAgent:
 
     def test_on_read_receipt(self):
         """Test _on_read_receipt tracks receipts."""
-        agent = TokenBowlAgent(
-            api_key="test", openrouter_api_key="test", verbose=True
-        )
+        agent = TokenBowlAgent(api_key="test", openrouter_api_key="test", verbose=True)
 
         agent.sent_messages["msg-123"] = "Test message"
 
@@ -590,7 +590,6 @@ class TestTokenBowlAgent:
     @pytest.mark.asyncio
     async def test_fetch_unread_messages(self):
         """Test fetching unread messages on startup."""
-        from datetime import datetime
 
         agent = TokenBowlAgent(
             api_key="test",

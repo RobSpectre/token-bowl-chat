@@ -28,7 +28,9 @@ from token_bowl_chat.websocket_client import TokenBowlWebSocket
 
 # MCP imports (optional)
 try:
-    from langchain_mcp_adapters.client import MultiServerMCPClient
+    from langchain_mcp_adapters.client import (  # type: ignore[import-untyped]
+        MultiServerMCPClient,
+    )
 
     MCP_AVAILABLE = True
 except ImportError:
@@ -149,7 +151,12 @@ class TokenBowlAgent:
         self.agent_executor: AgentExecutor | None = None
 
         # Sent message tracking for read receipts
-        self.sent_messages: dict[str, str] = {}  # message_id -> content
+        self.sent_messages: dict[
+            str, str
+        ] = {}  # message_id -> content (populated on echo)
+        self.sent_message_contents: deque[str] = deque(
+            maxlen=100
+        )  # Recently sent content
 
     def _load_prompt(self, prompt: str | None, default: str) -> str:
         """Load a prompt from text or file path.
@@ -187,7 +194,7 @@ class TokenBowlAgent:
 
         self.llm = ChatOpenAI(
             model=self.model_name,
-            api_key=SecretStr(self.openrouter_api_key),  # type: ignore[arg-type]
+            api_key=SecretStr(self.openrouter_api_key),
             base_url="https://openrouter.ai/api/v1",
             streaming=False,
             default_headers={
@@ -229,9 +236,7 @@ class TokenBowlAgent:
             self.mcp_tools = await self.mcp_client.get_tools()
 
             if self.verbose:
-                console.print(
-                    f"[dim]MCP: Connected to {self.mcp_server_url}[/dim]"
-                )
+                console.print(f"[dim]MCP: Connected to {self.mcp_server_url}[/dim]")
                 console.print(
                     f"[dim]MCP: Loaded {len(self.mcp_tools)} tools: {[t.name for t in self.mcp_tools]}[/dim]"
                 )
@@ -328,9 +333,9 @@ class TokenBowlAgent:
             Delay in seconds (capped at max_reconnect_delay)
         """
         # Exponential backoff: 2^attempt seconds, with jitter
-        base_delay = min(2**self.reconnect_attempts, self.max_reconnect_delay)
+        base_delay = float(min(2**self.reconnect_attempts, self.max_reconnect_delay))
         jitter = random.uniform(0, 0.1 * base_delay)
-        return base_delay + jitter
+        return float(base_delay + jitter)
 
     async def _connect_websocket(self) -> bool:
         """Connect to the WebSocket server with retry logic.
@@ -392,7 +397,9 @@ class TokenBowlAgent:
 
         # Don't respond to our own messages
         # (WebSocket echoes back sent messages)
-        if msg.id in self.sent_messages:
+        if msg.content in self.sent_message_contents:
+            # This is an echo of our own message - track it by ID
+            self.sent_messages[msg.id] = msg.content
             if self.verbose:
                 console.print(f"[dim]Skipping own message: {msg.id[:8]}...[/dim]")
             return
@@ -487,7 +494,9 @@ class TokenBowlAgent:
                     self.stats.messages_received += len(all_unread)
 
         except Exception as e:
-            console.print(f"[yellow]Warning: Failed to fetch unread messages: {e}[/yellow]")
+            console.print(
+                f"[yellow]Warning: Failed to fetch unread messages: {e}[/yellow]"
+            )
             if self.verbose:
                 import traceback
 
@@ -546,7 +555,9 @@ class TokenBowlAgent:
                     # Add conversation history
                     for msg in self.conversation_history:
                         if isinstance(msg, HumanMessage):
-                            llm_messages.append({"role": "user", "content": msg.content})
+                            llm_messages.append(
+                                {"role": "user", "content": msg.content}
+                            )
                         elif isinstance(msg, AIMessage):
                             llm_messages.append(
                                 {"role": "assistant", "content": msg.content}
@@ -579,7 +590,9 @@ class TokenBowlAgent:
             # Skip sending if response is empty
             if not response_text:
                 if self.verbose:
-                    console.print("[yellow]Skipping send - LLM returned empty response[/yellow]")
+                    console.print(
+                        "[yellow]Skipping send - LLM returned empty response[/yellow]"
+                    )
                 return
 
             # Send responses
@@ -593,14 +606,15 @@ class TokenBowlAgent:
                         await self.ws.send_typing_indicator(to_username=to_username)
                         await asyncio.sleep(0.5)
 
-                        # Send message
-                        sent_msg = await self.ws.send_message(
+                        # Track sent message content before sending
+                        # (so we can identify the echo in _on_message)
+                        self.sent_message_contents.append(response_text)
+
+                        # Send message (Note: WebSocket send_message returns None,
+                        # message ID tracking happens when server echoes back in _on_message)
+                        await self.ws.send_message(
                             response_text, to_username=to_username
                         )
-
-                        # Track sent message
-                        if sent_msg and hasattr(sent_msg, "id"):
-                            self.sent_messages[sent_msg.id] = response_text
 
                         self.stats.messages_sent += 1
 
@@ -674,6 +688,7 @@ class TokenBowlAgent:
 
                 # Wait for the receive task to complete (happens when connection closes)
                 # The WebSocket client automatically starts _receive_loop() in connect()
+                assert self.ws is not None  # Type narrowing for mypy
                 if self.ws._receive_task:
                     await self.ws._receive_task
 

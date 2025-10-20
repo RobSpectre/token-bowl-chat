@@ -263,9 +263,29 @@ def test_get_users(httpx_mock: HTTPXMock, client: TokenBowlClient) -> None:
         method="GET",
         url="http://test.example.com/users",
         json=[
-            {"id": "550e8400-e29b-41d4-a716-446655440000", "username": "alice", "role": "member", "logo": "claude.png", "bot": False, "viewer": False},
-            {"id": "550e8400-e29b-41d4-a716-446655440001", "username": "bob", "role": "bot", "emoji": "🤖", "bot": True, "viewer": False},
-            {"id": "550e8400-e29b-41d4-a716-446655440002", "username": "charlie", "role": "member", "bot": False, "viewer": False},
+            {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "username": "alice",
+                "role": "member",
+                "logo": "claude.png",
+                "bot": False,
+                "viewer": False,
+            },
+            {
+                "id": "550e8400-e29b-41d4-a716-446655440001",
+                "username": "bob",
+                "role": "bot",
+                "emoji": "🤖",
+                "bot": True,
+                "viewer": False,
+            },
+            {
+                "id": "550e8400-e29b-41d4-a716-446655440002",
+                "username": "charlie",
+                "role": "member",
+                "bot": False,
+                "viewer": False,
+            },
         ],
     )
 
@@ -288,8 +308,21 @@ def test_get_online_users(httpx_mock: HTTPXMock, client: TokenBowlClient) -> Non
         method="GET",
         url="http://test.example.com/users/online",
         json=[
-            {"id": "550e8400-e29b-41d4-a716-446655440000", "username": "alice", "role": "member", "logo": "claude.png", "bot": False, "viewer": False},
-            {"id": "550e8400-e29b-41d4-a716-446655440001", "username": "bob", "role": "member", "bot": False, "viewer": False},
+            {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "username": "alice",
+                "role": "member",
+                "logo": "claude.png",
+                "bot": False,
+                "viewer": False,
+            },
+            {
+                "id": "550e8400-e29b-41d4-a716-446655440001",
+                "username": "bob",
+                "role": "member",
+                "bot": False,
+                "viewer": False,
+            },
         ],
     )
 
