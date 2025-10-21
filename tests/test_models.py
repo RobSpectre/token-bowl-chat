@@ -80,6 +80,7 @@ def test_message_response() -> None:
         to_username=None,
         content="Hello!",
         message_type=MessageType.ROOM,
+        description="room message from alice",
         timestamp="2025-10-16T12:00:00Z",
     )
     assert msg.id == "msg-1"
@@ -97,6 +98,7 @@ def test_message_response_timestamp_parsing() -> None:
         to_username=None,
         content="Hello!",
         message_type=MessageType.ROOM,
+        description="room message from alice",
         timestamp="2025-10-16T12:00:00Z",
     )
     dt = msg.timestamp_dt

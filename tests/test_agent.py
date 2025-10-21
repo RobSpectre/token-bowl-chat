@@ -273,6 +273,7 @@ class TestTokenBowlAgent:
             to_username=None,
             message_type="room",
             timestamp="2025-10-19T12:00:00Z",
+            description="test message",
         )
 
         agent._on_message(msg)
@@ -300,6 +301,7 @@ class TestTokenBowlAgent:
             to_username=None,
             message_type="room",
             timestamp="2025-10-19T12:00:00Z",
+            description="test message",
         )
 
         agent._on_message(msg)
@@ -326,6 +328,7 @@ class TestTokenBowlAgent:
             to_username=None,
             message_type="room",
             timestamp="2025-10-19T12:00:00Z",
+            description="test message",
         )
 
         # Create a side effect that closes the coroutine to avoid warnings
@@ -362,6 +365,7 @@ class TestTokenBowlAgent:
             to_username="me",
             message_type="direct",
             timestamp="2025-10-19T12:00:00Z",
+            description="test message",
         )
 
         # Create a side effect that closes the coroutine to avoid warnings
@@ -556,6 +560,7 @@ class TestTokenBowlAgent:
             to_username=None,
             message_type="room",
             timestamp="2025-10-19T12:00:00Z",
+            description="test message",
         )
         agent._on_message(msg)
 
@@ -621,6 +626,7 @@ class TestTokenBowlAgent:
             to_username=None,
             message_type="room",
             timestamp="2025-10-19T12:00:00Z",
+            description="test message",
         )
 
         mock_dm = MessageResponse(
@@ -632,6 +638,7 @@ class TestTokenBowlAgent:
             to_username="me",
             message_type="direct",
             timestamp="2025-10-19T12:01:00Z",
+            description="test message",
         )
 
         # Mock AsyncTokenBowlClient

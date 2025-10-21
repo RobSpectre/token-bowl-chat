@@ -18,6 +18,13 @@ from .exceptions import (
 from .models import (
     AdminMessageUpdate,
     AdminUpdateUserRequest,
+    AssignRoleRequest,
+    AssignRoleResponse,
+    BotProfileResponse,
+    CreateBotRequest,
+    CreateBotResponse,
+    InviteUserRequest,
+    InviteUserResponse,
     MessageResponse,
     PaginatedMessagesResponse,
     PublicUserProfile,
@@ -27,6 +34,7 @@ from .models import (
     StytchLoginRequest,
     StytchLoginResponse,
     UnreadCountResponse,
+    UpdateBotRequest,
     UpdateLogoRequest,
     UpdateUsernameRequest,
     UpdateWebhookRequest,
@@ -319,13 +327,12 @@ class TokenBowlClient:
     def get_available_logos(self) -> list[str]:
         """Get list of available logo filenames.
 
+        This is a public endpoint - no authentication required.
+
         Returns:
             List of available logo filenames
-
-        Raises:
-            AuthenticationError: If not authenticated
         """
-        response = self._request("GET", "/logos", requires_auth=True)
+        response = self._request("GET", "/logos", requires_auth=False)
         return cast(list[str], response.json())
 
     def update_my_logo(self, logo: str | None = None) -> dict[str, str]:
@@ -519,25 +526,25 @@ class TokenBowlClient:
         )
         return UserProfileResponse.model_validate(response.json())
 
-    def get_user_profile(self, username: str) -> PublicUserProfile:
+    def get_user_profile(self, user_id: str) -> PublicUserProfile:
         """Get public profile for a specific user.
 
         Returns public information (username, logo, emoji, bot, viewer status)
         without sensitive data (API key, email, webhook URL).
 
         Args:
-            username: Username to retrieve
+            user_id: User UUID to retrieve
 
         Returns:
             Public user profile
 
         Raises:
             AuthenticationError: If not authenticated
-            NotFoundError: If user not found
+            NotFoundError: If user not found or invalid UUID
         """
         response = self._request(
             "GET",
-            f"/users/{username}",
+            f"/users/{user_id}",
             requires_auth=True,
         )
         return PublicUserProfile.model_validate(response.json())
@@ -624,33 +631,33 @@ class TokenBowlClient:
         )
         return [UserProfileResponse.model_validate(user) for user in response.json()]
 
-    def admin_get_user(self, username: str) -> UserProfileResponse:
+    def admin_get_user(self, user_id: str) -> UserProfileResponse:
         """Admin: Get a specific user's full profile.
 
         Args:
-            username: Username to retrieve
+            user_id: User UUID to retrieve
 
         Returns:
             User profile
 
         Raises:
             AuthenticationError: If not authenticated or not admin
-            NotFoundError: If user not found
+            NotFoundError: If user not found or invalid UUID
         """
         response = self._request(
             "GET",
-            f"/admin/users/{username}",
+            f"/admin/users/{user_id}",
             requires_auth=True,
         )
         return UserProfileResponse.model_validate(response.json())
 
     def admin_update_user(
-        self, username: str, update_request: AdminUpdateUserRequest
+        self, user_id: str, update_request: AdminUpdateUserRequest
     ) -> UserProfileResponse:
         """Admin: Update any user's profile fields.
 
         Args:
-            username: Username to update
+            user_id: User UUID to update
             update_request: Fields to update
 
         Returns:
@@ -658,30 +665,30 @@ class TokenBowlClient:
 
         Raises:
             AuthenticationError: If not authenticated or not admin
-            NotFoundError: If user not found
+            NotFoundError: If user not found or invalid UUID
             ValidationError: If update data is invalid
         """
         response = self._request(
             "PATCH",
-            f"/admin/users/{username}",
+            f"/admin/users/{user_id}",
             requires_auth=True,
             json=update_request.model_dump(exclude_none=True),
         )
         return UserProfileResponse.model_validate(response.json())
 
-    def admin_delete_user(self, username: str) -> None:
+    def admin_delete_user(self, user_id: str) -> None:
         """Admin: Delete a user.
 
         Args:
-            username: Username to delete
+            user_id: User UUID to delete
 
         Raises:
             AuthenticationError: If not authenticated or not admin
-            NotFoundError: If user not found
+            NotFoundError: If user not found or invalid UUID
         """
         self._request(
             "DELETE",
-            f"/admin/users/{username}",
+            f"/admin/users/{user_id}",
             requires_auth=True,
         )
 
@@ -744,6 +751,189 @@ class TokenBowlClient:
             f"/admin/messages/{message_id}",
             requires_auth=True,
         )
+
+    def admin_assign_role(self, user_id: str, role: str) -> AssignRoleResponse:
+        """Admin: Assign a role to a user.
+
+        Args:
+            user_id: User UUID to assign role to
+            role: Role to assign (admin, member, viewer, bot)
+
+        Returns:
+            Role assignment response
+
+        Raises:
+            AuthenticationError: If not authenticated or not admin with ASSIGN_ROLES permission
+            NotFoundError: If user not found or invalid UUID
+            ValidationError: If role is invalid
+        """
+        from .models import Role
+
+        request = AssignRoleRequest(role=Role(role))
+        response = self._request(
+            "PATCH",
+            f"/admin/users/{user_id}/role",
+            requires_auth=True,
+            json=request.model_dump(),
+        )
+        return AssignRoleResponse.model_validate(response.json())
+
+    def admin_invite_user(
+        self, email: str, signup_url: str, role: str = "member"
+    ) -> InviteUserResponse:
+        """Admin: Invite a user by email using Stytch magic link.
+
+        Sends a magic link invitation to the specified email address. When the user clicks
+        the link and authenticates, they will be automatically registered with the specified role.
+
+        Args:
+            email: Email address to invite
+            signup_url: URL to redirect to after clicking magic link (e.g., https://app.example.com/signup)
+            role: Role to assign to the invited user (default: member)
+
+        Returns:
+            Invite response with confirmation
+
+        Raises:
+            AuthenticationError: If not authenticated or not admin
+            ServerError: If Stytch is not enabled or invitation fails
+            ValidationError: If email or role is invalid
+        """
+        from .models import Role
+
+        request = InviteUserRequest(
+            email=email,
+            role=Role(role),
+            signup_url=signup_url,
+        )
+        response = self._request(
+            "POST",
+            "/admin/invite",
+            requires_auth=True,
+            json=request.model_dump(),
+        )
+        return InviteUserResponse.model_validate(response.json())
+
+    # Bot Management Methods
+
+    def create_bot(
+        self,
+        username: str,
+        emoji: str | None = None,
+        webhook_url: str | None = None,
+    ) -> CreateBotResponse:
+        """Create a new bot (members and admins only).
+
+        Args:
+            username: Bot username (1-50 characters)
+            emoji: Optional emoji for the bot
+            webhook_url: Optional webhook URL for notifications
+
+        Returns:
+            Created bot information with API key
+
+        Raises:
+            AuthenticationError: If not authenticated or not member/admin
+            ConflictError: If username already exists
+            ValidationError: If input validation fails
+        """
+        request = CreateBotRequest(
+            username=username,
+            emoji=emoji,
+            webhook_url=webhook_url,
+        )
+        response = self._request(
+            "POST",
+            "/bots",
+            requires_auth=True,
+            json=request.model_dump(exclude_none=True),
+        )
+        return CreateBotResponse.model_validate(response.json())
+
+    def get_my_bots(self) -> list[BotProfileResponse]:
+        """Get all bots created by the current user.
+
+        Returns:
+            List of bots created by this user
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = self._request(
+            "GET",
+            "/bots/me",
+            requires_auth=True,
+        )
+        return [BotProfileResponse.model_validate(bot) for bot in response.json()]
+
+    def update_bot(
+        self,
+        bot_id: str,
+        emoji: str | None = None,
+        webhook_url: str | None = None,
+    ) -> BotProfileResponse:
+        """Update a bot's configuration (owner or admin only).
+
+        Args:
+            bot_id: Bot UUID to update
+            emoji: Optional emoji for the bot
+            webhook_url: Optional webhook URL for notifications
+
+        Returns:
+            Updated bot profile
+
+        Raises:
+            AuthenticationError: If not authenticated or don't own the bot
+            NotFoundError: If bot not found or invalid UUID
+            ValidationError: If update data is invalid
+        """
+        request = UpdateBotRequest(
+            emoji=emoji,
+            webhook_url=webhook_url,
+        )
+        response = self._request(
+            "PATCH",
+            f"/bots/{bot_id}",
+            requires_auth=True,
+            json=request.model_dump(exclude_none=True),
+        )
+        return BotProfileResponse.model_validate(response.json())
+
+    def delete_bot(self, bot_id: str) -> None:
+        """Delete a bot (owner or admin only).
+
+        Args:
+            bot_id: Bot UUID to delete
+
+        Raises:
+            AuthenticationError: If not authenticated or don't own the bot
+            NotFoundError: If bot not found or invalid UUID
+        """
+        self._request(
+            "DELETE",
+            f"/bots/{bot_id}",
+            requires_auth=True,
+        )
+
+    def regenerate_bot_api_key(self, bot_id: str) -> dict[str, str]:
+        """Regenerate a bot's API key (owner or admin only).
+
+        Args:
+            bot_id: Bot UUID
+
+        Returns:
+            Success message with new API key
+
+        Raises:
+            AuthenticationError: If not authenticated or don't own the bot
+            NotFoundError: If bot not found or invalid UUID
+        """
+        response = self._request(
+            "POST",
+            f"/bots/{bot_id}/regenerate-api-key",
+            requires_auth=True,
+        )
+        return cast(dict[str, str], response.json())
 
     def health_check(self) -> dict[str, str]:
         """Check server health status.

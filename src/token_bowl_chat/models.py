@@ -33,6 +33,7 @@ class UserRegistration(BaseModel):
     username: str = Field(..., min_length=1, max_length=50)
     webhook_url: str | None = Field(None, min_length=1, max_length=2083)
     logo: str | None = None
+    role: Role | None = None
     viewer: bool = False
     admin: bool = False
     bot: bool = False
@@ -82,6 +83,7 @@ class MessageResponse(BaseModel):
     to_username: str | None = None
     content: str
     message_type: MessageType
+    description: str
     timestamp: str
 
     @property
@@ -214,6 +216,7 @@ class StytchAuthenticateResponse(BaseModel):
 class AdminUpdateUserRequest(BaseModel):
     """Admin request model for updating any user's profile."""
 
+    username: str | None = None
     email: str | None = None
     webhook_url: str | None = Field(None, min_length=1, max_length=2083)
     logo: str | None = None
@@ -235,3 +238,94 @@ class AdminMessageUpdate(BaseModel):
     """Admin request model for updating message content."""
 
     content: str = Field(..., min_length=1, max_length=10000)
+
+
+class CreateBotRequest(BaseModel):
+    """Request model for creating a bot."""
+
+    username: str = Field(..., min_length=1, max_length=50)
+    emoji: str | None = None
+    webhook_url: str | None = Field(None, min_length=1, max_length=2083)
+
+    @field_validator("webhook_url")
+    @classmethod
+    def validate_webhook_url(cls, v: str | None) -> str | None:
+        """Validate webhook URL format."""
+        if v is not None and not v.startswith(("http://", "https://")):
+            raise ValueError("webhook_url must be a valid HTTP(S) URL")
+        return v
+
+
+class CreateBotResponse(BaseModel):
+    """Response model for bot creation."""
+
+    id: str  # UUID as string
+    username: str
+    api_key: str
+    created_by_id: str  # UUID as string
+    created_by: str  # Creator username
+    emoji: str | None = None
+    webhook_url: str | None = Field(None, min_length=1, max_length=2083)
+
+
+class BotProfileResponse(BaseModel):
+    """Response model for bot profile."""
+
+    id: str  # UUID as string
+    username: str
+    api_key: str
+    created_by_id: str  # UUID as string
+    created_by: str  # Creator username
+    emoji: str | None = None
+    webhook_url: str | None = Field(None, min_length=1, max_length=2083)
+    created_at: str
+
+
+class UpdateBotRequest(BaseModel):
+    """Request model for updating a bot."""
+
+    emoji: str | None = None
+    webhook_url: str | None = Field(None, min_length=1, max_length=2083)
+
+    @field_validator("webhook_url")
+    @classmethod
+    def validate_webhook_url(cls, v: str | None) -> str | None:
+        """Validate webhook URL format."""
+        if v is not None and not v.startswith(("http://", "https://")):
+            raise ValueError("webhook_url must be a valid HTTP(S) URL")
+        return v
+
+
+class AssignRoleRequest(BaseModel):
+    """Request model for assigning a role to a user (admin only)."""
+
+    role: Role
+
+
+class AssignRoleResponse(BaseModel):
+    """Response model for role assignment."""
+
+    username: str
+    role: Role
+    message: str
+
+
+class InviteUserRequest(BaseModel):
+    """Request to invite a user by email."""
+
+    email: str = Field(..., description="Email address to invite")
+    role: Role = Field(
+        default=Role.MEMBER, description="Role to assign to the invited user"
+    )
+    signup_url: str = Field(
+        ...,
+        description="URL to redirect to after clicking magic link (e.g., https://app.example.com/signup)",
+    )
+
+
+class InviteUserResponse(BaseModel):
+    """Response after sending invitation."""
+
+    email: str
+    role: Role
+    message: str

@@ -144,6 +144,7 @@ async def test_receive_message():
         "to_username": None,
         "content": "Hello!",
         "message_type": "room",
+        "description": "test message",
         "timestamp": "2024-01-01T00:00:00Z",
     }
 

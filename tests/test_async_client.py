@@ -62,6 +62,7 @@ async def test_send_message(
             "to_username": None,
             "content": "Hello, async!",
             "message_type": "room",
+            "description": "test message",
             "timestamp": "2025-10-16T12:00:00Z",
         },
         status_code=201,
@@ -91,6 +92,7 @@ async def test_get_messages(
                     "to_username": None,
                     "content": "Hello!",
                     "message_type": "room",
+                    "description": "test message",
                     "timestamp": "2025-10-16T12:00:00Z",
                 }
             ],
