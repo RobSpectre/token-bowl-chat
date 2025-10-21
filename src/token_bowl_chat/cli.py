@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import os
 from datetime import datetime
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -793,6 +794,248 @@ def run_agent(
 
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
         raise typer.Exit(1) from e
+
+
+@agent_app.command("send")
+def send_agent_message(
+    message: str = typer.Argument(..., help="Message/prompt to send"),
+    to: str | None = typer.Option(None, "--to", "-t", help="Send as DM to user"),
+    api_key: str | None = typer.Option(
+        None,
+        "--api-key",
+        "-k",
+        envvar="TOKEN_BOWL_CHAT_API_KEY",
+        help="Token Bowl Chat API key",
+    ),
+    openrouter_api_key: str | None = typer.Option(
+        None,
+        "--openrouter-key",
+        "-o",
+        envvar="OPENROUTER_API_KEY",
+        help="OpenRouter API key",
+    ),
+    system: str | None = typer.Option(
+        None,
+        "--system",
+        "-s",
+        help="System prompt (agent personality) - text or path to markdown file",
+    ),
+    user: str | None = typer.Option(
+        None,
+        "--user",
+        "-u",
+        help="User prompt (batch processing instructions) - text or path to markdown file",
+    ),
+    model: str = typer.Option(
+        "openai/gpt-4o-mini", "--model", "-m", help="OpenRouter model name"
+    ),
+    server: str = typer.Option(
+        "https://api.tokenbowl.ai", "--server", help="API server URL"
+    ),
+    context_window: int = typer.Option(
+        128000,
+        "--context-window",
+        "-c",
+        help="Maximum context window in tokens for conversation history",
+    ),
+    mcp_enabled: bool = typer.Option(
+        True,
+        "--mcp/--no-mcp",
+        help="Enable/disable MCP (Model Context Protocol) tools",
+    ),
+    mcp_server_url: str = typer.Option(
+        "https://tokenbowl-mcp.haihai.ai/sse",
+        "--mcp-server",
+        help="MCP server URL (SSE transport)",
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose logging"
+    ),
+    max_reconnect_delay: float = typer.Option(  # noqa: ARG001
+        300.0,
+        "--max-reconnect-delay",
+        help="(Unused for send command, kept for compatibility)",
+        hidden=True,
+    ),
+    queue_interval: float = typer.Option(  # noqa: ARG001
+        15.0,
+        "--queue-interval",
+        "-q",
+        help="(Unused for send command, kept for compatibility)",
+        hidden=True,
+    ),
+) -> None:
+    """🚀 Generate an AI response and send a single message.
+
+    This command uses the same LangChain/OpenRouter setup as 'agent run' but sends
+    a single message and exits immediately. Useful for:
+    - One-off AI-generated messages
+    - Scheduled jobs (cron, etc.)
+    - CI/CD pipelines
+    - Testing agent responses
+
+    Example:
+        # Send AI-generated message to room
+        $ token-bowl agent send "What's the weather today?"
+
+        # Send AI-generated DM
+        $ token-bowl agent send "Tell me about fantasy football" --to alice
+
+        # Use custom system prompt
+        $ token-bowl agent send "Give me advice" --system prompts/expert.md
+    """
+    # Validate API keys
+    if not api_key:
+        console.print(
+            "[bold red]Error:[/bold red] No Token Bowl Chat API key provided.\n"
+            "Set TOKEN_BOWL_CHAT_API_KEY or use --api-key"
+        )
+        raise typer.Exit(1)
+
+    if not openrouter_api_key:
+        console.print(
+            "[bold red]Error:[/bold red] No OpenRouter API key provided.\n"
+            "Set OPENROUTER_API_KEY or use --openrouter-key"
+        )
+        raise typer.Exit(1)
+
+    try:
+        from token_bowl_chat.agent import TokenBowlAgent
+
+        # Create agent instance for LLM setup
+        agent = TokenBowlAgent(
+            api_key=api_key,
+            openrouter_api_key=openrouter_api_key,
+            system_prompt=system,
+            user_prompt=user,
+            model_name=model,
+            server_url=server,
+            context_window=context_window,
+            mcp_enabled=mcp_enabled,
+            mcp_server_url=mcp_server_url,
+            verbose=verbose,
+        )
+
+        # Run async generation and send
+        asyncio.run(_generate_and_send(agent, message, to_username=to, verbose=verbose))
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Cancelled[/yellow]")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        if verbose:
+            import traceback
+
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        raise typer.Exit(1) from e
+
+
+async def _generate_and_send(
+    agent: Any, message: str, to_username: str | None = None, verbose: bool = False
+) -> None:
+    """Generate AI response and send a single message.
+
+    Args:
+        agent: TokenBowlAgent instance (used for LLM setup only)
+        message: User message/prompt
+        to_username: Optional username to send DM to
+        verbose: Enable verbose logging
+    """
+    from langchain_community.callbacks import get_openai_callback
+
+    try:
+        # Initialize LLM and MCP
+        console.print("[cyan]🤖 Initializing AI...[/cyan]")
+        await agent._initialize_llm()
+
+        if not agent.llm:
+            console.print("[bold red]Failed to initialize LLM[/bold red]")
+            raise typer.Exit(1)
+
+        # Prepare prompt
+        prompt = f"{agent.user_prompt}\n\nMessage:\n{message}"
+
+        if verbose:
+            console.print(f"[dim]Generating response for: {message}[/dim]")
+
+        # Generate response
+        console.print("[cyan]💭 Generating response...[/cyan]")
+
+        with get_openai_callback() as cb:
+            # Use agent executor if MCP is enabled, otherwise direct LLM call
+            if agent.agent_executor:
+                if verbose:
+                    console.print(
+                        f"[dim]Using agent with {len(agent.mcp_tools)} MCP tools[/dim]"
+                    )
+
+                result = await agent.agent_executor.ainvoke(
+                    {
+                        "input": prompt,
+                        "chat_history": [],
+                    }
+                )
+                response_text = result.get("output", "")
+
+                # Log tool calls if verbose
+                if verbose and "intermediate_steps" in result:
+                    for step in result["intermediate_steps"]:
+                        if len(step) >= 2:
+                            action, observation = step
+                            console.print(
+                                f"[dim]🔧 Tool: {action.tool} -> {str(observation)[:100]}...[/dim]"
+                            )
+            else:
+                # Direct LLM call without tools
+                if verbose:
+                    console.print("[dim]Using direct LLM call (no MCP tools)[/dim]")
+
+                llm_messages: list[dict[str, Any]] = [
+                    {"role": "system", "content": agent.system_prompt},
+                    {"role": "user", "content": prompt},
+                ]
+
+                response = await agent.llm.ainvoke(llm_messages)
+                response_text = str(response.content) if response.content else ""
+
+            # Strip whitespace
+            response_text = response_text.strip()
+
+            if verbose:
+                console.print(
+                    f"[dim]Generated response ({cb.total_tokens} tokens, "
+                    f"${cb.total_cost:.4f}): {response_text[:100]}...[/dim]"
+                )
+
+        if not response_text:
+            console.print("[yellow]AI returned empty response, not sending[/yellow]")
+            return
+
+        # Send message using synchronous client
+        console.print("[cyan]📤 Sending message...[/cyan]")
+
+        # Convert WebSocket URL to HTTP URL if needed
+        server_url = agent.server_url.replace("wss://", "https://").replace("/ws", "")
+
+        client = TokenBowlClient(api_key=agent.api_key, base_url=server_url)
+        result = client.send_message(response_text, to_username=to_username)
+
+        # Display success
+        msg_type = f"💬 DM to {to_username}" if to_username else "📢 Room message"
+        console.print(
+            f"\n[bold green]✓ {msg_type} sent![/bold green]\n"
+            f"[bold]Response:[/bold] {response_text}\n"
+            f"[dim]Message ID: {result.id}[/dim]"
+        )
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        if verbose:
+            import traceback
+
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        raise
 
 
 # ============================================================================
