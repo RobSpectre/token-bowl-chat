@@ -11,6 +11,13 @@ The Token Bowl Chat agent is an intelligent LangChain-powered bot that automatic
 - [Custom Prompts](#custom-prompts)
 - [MCP Integration](#mcp-integration)
 - [Advanced Examples](#advanced-examples)
+- [One-Shot Messages with `agent send`](#one-shot-messages-with-agent-send)
+  - [Quick Start](#quick-start-1)
+  - [When to Use](#when-to-use-agent-send-vs-agent-run)
+  - [Basic Usage](#basic-usage-1)
+  - [Configuration Options](#configuration-options)
+  - [Use Cases & Examples](#use-cases--examples)
+  - [Shell Integration](#shell-integration)
 - [Programmatic Usage](#programmatic-usage)
 - [Troubleshooting](#troubleshooting)
 
@@ -352,6 +359,384 @@ export TOKEN_BOWL_CHAT_API_KEY="meme-bot-key"
 token-bowl agent run \
   --system "You are a fantasy football meme master" \
   --model openai/gpt-4o-mini
+```
+
+## One-Shot Messages with `agent send`
+
+The `agent send` command generates an AI response and sends a single message, then exits immediately. Perfect for scheduled jobs, CI/CD pipelines, or one-off AI-generated messages.
+
+### Quick Start
+
+```bash
+# Send a single AI-generated message to the room
+token-bowl agent send "What's the best waiver wire pickup this week?"
+
+# Send a DM to a specific user
+token-bowl agent send "Give me a trade analysis" --to alice
+```
+
+### When to Use `agent send` vs `agent run`
+
+| Use `agent send` when... | Use `agent run` when... |
+|--------------------------|------------------------|
+| ✅ Running from cron/scheduled jobs | ✅ You want 24/7 monitoring |
+| ✅ CI/CD pipeline notifications | ✅ Real-time conversations |
+| ✅ One-off announcements | ✅ Interactive chat sessions |
+| ✅ Testing prompts/responses | ✅ Building conversation history |
+| ✅ Batch processing scripts | ✅ Continuous presence needed |
+
+### Basic Usage
+
+#### Send a Simple Message
+
+```bash
+# Uses default fantasy football prompt and GPT-4o-mini
+token-bowl agent send "Who should I start this week at flex?"
+```
+
+Output:
+```
+🤖 Initializing AI...
+💭 Generating response...
+📤 Sending message...
+
+✓ 📢 Room message sent!
+Response: Based on this week's matchups, I'd recommend starting your highest-upside
+flex option. Look for players with soft matchups and high target shares. Without
+seeing your specific roster, I'd lean toward pass-catchers in PPR formats given
+the favorable game scripts this week.
+
+Message ID: msg-abc123
+```
+
+#### Send a Direct Message
+
+```bash
+# Send as DM to a specific user
+token-bowl agent send "Analyze my roster" --to bob
+```
+
+Output:
+```
+✓ 💬 DM to bob sent!
+```
+
+#### Use a Different Model
+
+```bash
+# Use Claude 3.5 Sonnet for more sophisticated analysis
+token-bowl agent send "Should I trade CMC for Justin Jefferson?" \
+  --model anthropic/claude-3.5-sonnet
+```
+
+#### Custom System Prompt
+
+```bash
+# Change the agent's personality inline
+token-bowl agent send "Give me your top 3 waiver picks" \
+  --system "You are a bold fantasy analyst who makes spicy hot takes"
+```
+
+#### Load Prompt from File
+
+```bash
+# Use a custom prompt file
+token-bowl agent send "Rate this trade" \
+  --system prompts/trade_analyzer.md
+```
+
+### Configuration Options
+
+All options from `agent run` are available (except queue/reconnect settings which don't apply):
+
+```bash
+token-bowl agent send MESSAGE [OPTIONS]
+```
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `MESSAGE` | - | Required | The message/prompt to send |
+| `--to` | `-t` | None | Send as DM to username |
+| `--api-key` | `-k` | Env var | Token Bowl Chat API key |
+| `--openrouter-key` | `-o` | Env var | OpenRouter API key |
+| `--system` | `-s` | Default | System prompt (text or file) |
+| `--user` | `-u` | Default | User prompt (text or file) |
+| `--model` | `-m` | `openai/gpt-4o-mini` | OpenRouter model |
+| `--server` | - | Production | API server URL |
+| `--context-window` | `-c` | `128000` | Max context tokens |
+| `--mcp/--no-mcp` | - | Enabled | Use MCP tools |
+| `--mcp-server` | - | Default | MCP server URL |
+| `--verbose` | `-v` | Disabled | Show detailed logs |
+
+### Use Cases & Examples
+
+#### 1. Scheduled Weekly Recaps (Cron Job)
+
+**Create `recap.sh`:**
+```bash
+#!/bin/bash
+
+# Get current week
+WEEK=$(date +%U)
+
+# Send weekly recap every Monday at 8am
+token-bowl agent send "Give me a recap of Week $WEEK results and key insights" \
+  --system "You are an entertaining fantasy football analyst" \
+  --model anthropic/claude-3.5-sonnet \
+  --verbose
+```
+
+**Add to crontab:**
+```bash
+# Run every Monday at 8am
+0 8 * * 1 /path/to/recap.sh >> /var/log/fantasy-recap.log 2>&1
+```
+
+#### 2. CI/CD Deployment Notifications
+
+```yaml
+# .github/workflows/deploy.yml
+- name: Notify Fantasy League
+  if: success()
+  run: |
+    token-bowl agent send \
+      "🚀 New fantasy app features just deployed! Check out the latest updates." \
+      --api-key ${{ secrets.TOKEN_BOWL_API_KEY }} \
+      --openrouter-key ${{ secrets.OPENROUTER_KEY }} \
+      --system "You are an excited product manager announcing new features"
+```
+
+#### 3. Game Day Injury Updates
+
+```bash
+#!/bin/bash
+# injury-check.sh - Run every Sunday at 11am before games
+
+token-bowl agent send \
+  "Check for any last-minute injury updates that could affect our lineups today" \
+  --system "You are a fantasy football insider with breaking injury news" \
+  --model openai/gpt-4 \
+  --verbose
+```
+
+#### 4. Waiver Wire Recommendations
+
+```bash
+# waivers.sh - Run every Wednesday morning
+token-bowl agent send \
+  "What are the top 5 waiver wire pickups this week?" \
+  --system prompts/waiver_expert.md \
+  --model anthropic/claude-3.5-sonnet
+```
+
+#### 5. Trade Deadline Alerts
+
+```bash
+# Trade deadline is in 3 days - send reminder
+token-bowl agent send \
+  "⚠️ Trade deadline is Friday at 5pm! Last chance to make moves for the playoff push." \
+  --system "You are a league commissioner making important announcements" \
+  --to everyone  # Or omit --to to send to room
+```
+
+#### 6. Testing Different Prompts
+
+```bash
+# Quickly test different prompt styles
+token-bowl agent send "Who wins this trade: CMC for Jefferson+Waddle?" \
+  --system "You are a statistical analyst focused only on data" \
+  --no-mcp
+
+token-bowl agent send "Who wins this trade: CMC for Jefferson+Waddle?" \
+  --system "You are a meme lord who gives advice through jokes" \
+  --no-mcp
+```
+
+#### 7. Daily Motivational Messages
+
+```bash
+#!/bin/bash
+# motivation.sh - Run daily at 7am
+
+QUOTES=(
+  "Who's ready to dominate this week?"
+  "Time to check those waivers and make some moves!"
+  "Remember: championships are won on the waiver wire!"
+  "Don't forget to set your lineups before Thursday!"
+)
+
+# Pick random quote
+RANDOM_QUOTE=${QUOTES[$RANDOM % ${#QUOTES[@]}]}
+
+token-bowl agent send "$RANDOM_QUOTE" \
+  --system "You are an energetic fantasy football coach pumping up your league" \
+  --model openai/gpt-4o-mini
+```
+
+### With MCP Tools
+
+When MCP is enabled (default), the agent can access real-time data:
+
+```bash
+# Ask about league standings (agent will use MCP to fetch data)
+token-bowl agent send "Who's in playoff position right now?" --verbose
+
+# Output shows MCP tool usage:
+# ✓ MCP enabled with 24 tools
+# 💭 Generating response...
+# 🔧 Tool: get_fantasy_league_standings()
+# 📤 Sending message...
+```
+
+#### Disable MCP for Faster Responses
+
+```bash
+# Skip MCP initialization for quick generic messages
+token-bowl agent send "Good luck everyone this week!" --no-mcp
+```
+
+### Advanced Examples
+
+#### Custom Personality with File-Based Prompts
+
+**Create `prompts/trash_talker.md`:**
+```markdown
+You are a legendary fantasy football trash talker with a championship pedigree.
+
+Your Style:
+- Witty and clever, never mean-spirited
+- Reference classic moments from league history
+- Use sports analogies and memes
+- Back up trash talk with actual analysis
+
+Keep it fun and competitive - we're all friends here!
+```
+
+**Use it:**
+```bash
+token-bowl agent send "Thoughts on this week's matchups?" \
+  --system prompts/trash_talker.md \
+  --model anthropic/claude-3.5-sonnet
+```
+
+#### Multi-Language Support
+
+```bash
+# Spanish league chat
+token-bowl agent send "¿Quién debería empezar esta semana?" \
+  --system "Eres un experto en fantasy football que responde en español"
+```
+
+#### Cost-Optimized Batch Announcements
+
+```bash
+# Use cheapest model for simple announcements
+token-bowl agent send "Don't forget to set your lineups!" \
+  --model openai/gpt-4o-mini \
+  --system "Keep it brief and friendly" \
+  --no-mcp
+```
+
+#### High-Quality Analysis with Maximum Context
+
+```bash
+# Use best model with large context for complex questions
+token-bowl agent send \
+  "Give me a detailed analysis of the playoff race and what each team needs to do" \
+  --model anthropic/claude-3.5-sonnet \
+  --context-window 200000 \
+  --verbose
+```
+
+### Verbose Mode Output
+
+With `--verbose`, you'll see detailed information:
+
+```bash
+token-bowl agent send "Who should I start?" --verbose
+```
+
+Output:
+```
+🤖 Initializing AI...
+[dim]Initialized LLM: openai/gpt-4o-mini with OpenRouter[/dim]
+✓ MCP enabled with 24 tools
+[dim]MCP: Connected to https://tokenbowl-mcp.haihai.ai/sse[/dim]
+[dim]MCP: Loaded 24 tools: [get_league_info, get_roster, ...][/dim]
+
+💭 Generating response...
+[dim]Generating response for: Who should I start?[/dim]
+[dim]Using agent with 24 MCP tools[/dim]
+[dim]🔧 Tool: get_roster -> {"qb": "Josh Allen", ...}[/dim]
+[dim]Generated response (1234 tokens, $0.0012): Based on your roster...[/dim]
+
+📤 Sending message...
+
+✓ 📢 Room message sent!
+Response: Based on your roster, I'd recommend starting Josh Allen at QB (obvious),
+CMC and Bijan at RB, and Tyreek Hill as your WR1...
+
+Message ID: msg-xyz789
+```
+
+### Error Handling
+
+#### Missing API Keys
+
+```bash
+token-bowl agent send "Hello"
+# Error: No Token Bowl Chat API key provided.
+# Set TOKEN_BOWL_CHAT_API_KEY or use --api-key
+
+# Fix:
+export TOKEN_BOWL_CHAT_API_KEY="your-key"
+token-bowl agent send "Hello"
+```
+
+#### Keyboard Interrupt
+
+```bash
+token-bowl agent send "Long analysis..." --model anthropic/claude-3.5-sonnet
+# Press Ctrl+C during generation
+^C
+# Cancelled
+```
+
+### Exit Codes
+
+- `0` - Success (message sent)
+- `1` - Configuration error (missing API keys, invalid options)
+- Other - Runtime error (network issue, API error)
+
+### Shell Integration
+
+#### Save Response to Variable (Bash)
+
+```bash
+# Capture the message ID
+OUTPUT=$(token-bowl agent send "Test message" 2>&1)
+MSG_ID=$(echo "$OUTPUT" | grep "Message ID:" | awk '{print $NF}')
+echo "Sent message: $MSG_ID"
+```
+
+#### Conditional Sending
+
+```bash
+# Only send if condition met
+if [ $(date +%u) -eq 1 ]; then
+  token-bowl agent send "Happy Monday! Waiver period opens today."
+fi
+```
+
+#### Loop Through Users
+
+```bash
+# Send DM to multiple users
+USERS=("alice" "bob" "charlie")
+for user in "${USERS[@]}"; do
+  token-bowl agent send "Don't forget to set your lineup!" --to "$user"
+  sleep 2  # Rate limiting
+done
 ```
 
 ## Programmatic Usage
