@@ -8,10 +8,9 @@ import asyncio
 import contextlib
 import os
 import random
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -36,7 +35,19 @@ try:
 except ImportError:
     MCP_AVAILABLE = False
 
+# tiktoken for accurate token counting (optional, comes with openai package)
+try:
+    import tiktoken
+
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+
 console = Console()
+
+# Memory management constants
+MAX_SENT_MESSAGES_TRACKED = 1000  # Limit sent message tracking to prevent memory leaks
+MAX_MESSAGE_QUEUE_SIZE = 1000  # Maximum messages to queue before processing
 
 
 @dataclass
@@ -69,6 +80,22 @@ class AgentStats:
         hours, remainder = divmod(int(delta.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{hours}h {minutes}m {seconds}s"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert stats to dictionary for JSON serialization."""
+        return {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "uptime_seconds": int(
+                (datetime.now(timezone.utc) - self.start_time).total_seconds()
+            ),
+            "messages_received": self.messages_received,
+            "messages_sent": self.messages_sent,
+            "errors": self.errors,
+            "reconnections": self.reconnections,
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
+            "start_time": self.start_time.isoformat(),
+        }
 
 
 class TokenBowlAgent:
@@ -113,7 +140,16 @@ class TokenBowlAgent:
         self.server_url = server_url
         self.queue_interval = queue_interval
         self.max_reconnect_delay = max_reconnect_delay
+
+        # Validate and set context window
+        if context_window < 1000:
+            raise ValueError("context_window must be at least 1000 tokens")
+        if context_window > 1000000:
+            console.print(
+                f"[yellow]Warning: Large context window ({context_window} tokens) may consume significant RAM[/yellow]"
+            )
         self.context_window = context_window
+
         self.mcp_enabled = mcp_enabled and MCP_AVAILABLE
         self.mcp_server_url = mcp_server_url
         self.verbose = verbose
@@ -129,7 +165,8 @@ class TokenBowlAgent:
         )
 
         # Message queue and processing
-        self.message_queue: deque[MessageQueueItem] = deque()
+        # Limit queue size to prevent unbounded growth under heavy load
+        self.message_queue: deque[MessageQueueItem] = deque(maxlen=MAX_MESSAGE_QUEUE_SIZE)
         self.processing_lock = asyncio.Lock()
         self.last_flush_time = datetime.now(timezone.utc)
 
@@ -151,12 +188,22 @@ class TokenBowlAgent:
         self.agent_executor: AgentExecutor | None = None
 
         # Sent message tracking for read receipts
-        self.sent_messages: dict[
-            str, str
-        ] = {}  # message_id -> content (populated on echo)
+        # Use OrderedDict to maintain insertion order for efficient cleanup
+        self.sent_messages: OrderedDict[str, str] = OrderedDict()  # message_id -> content (populated on echo)
         self.sent_message_contents: deque[str] = deque(
             maxlen=100
         )  # Recently sent content
+
+        # Token counting - use tiktoken if available for accuracy
+        self.token_encoder: Any = None
+        if TIKTOKEN_AVAILABLE:
+            try:
+                # Try to get encoding for the specific model, fall back to cl100k_base
+                # cl100k_base is used by GPT-4, GPT-3.5-turbo, and text-embedding-ada-002
+                self.token_encoder = tiktoken.get_encoding("cl100k_base")
+            except Exception:
+                # If that fails, tiktoken is available but we can't get the encoding
+                pass
 
     def _load_prompt(self, prompt: str | None, default: str) -> str:
         """Load a prompt from text or file path.
@@ -280,7 +327,8 @@ class TokenBowlAgent:
     def _estimate_tokens(self, text: str) -> int:
         """Estimate token count for text.
 
-        Uses a simple heuristic: ~4 characters per token (conservative estimate).
+        Uses tiktoken for accurate counting if available, otherwise falls back
+        to a simple heuristic: ~4 characters per token (conservative estimate).
 
         Args:
             text: Text to estimate tokens for
@@ -288,6 +336,12 @@ class TokenBowlAgent:
         Returns:
             Estimated token count
         """
+        if self.token_encoder:
+            try:
+                return len(self.token_encoder.encode(text))
+            except Exception:
+                # Fall back to heuristic if encoding fails
+                pass
         return len(text) // 4
 
     def _trim_conversation_history(self) -> None:
@@ -325,6 +379,16 @@ class TokenBowlAgent:
                 console.print(
                     f"[dim]Trimmed {msg_type} message from history (context window management)[/dim]"
                 )
+
+    def _cleanup_sent_messages(self) -> None:
+        """Limit sent_messages dict size to prevent unbounded memory growth.
+
+        Removes oldest entries when limit is exceeded.
+        This prevents memory leaks in long-running agents.
+        """
+        while len(self.sent_messages) > MAX_SENT_MESSAGES_TRACKED:
+            # Remove oldest entry (first item in OrderedDict)
+            self.sent_messages.popitem(last=False)
 
     async def _calculate_backoff_delay(self) -> float:
         """Calculate exponential backoff delay with jitter.
@@ -400,6 +464,7 @@ class TokenBowlAgent:
         if msg.content in self.sent_message_contents:
             # This is an echo of our own message - track it by ID
             self.sent_messages[msg.id] = msg.content
+            self._cleanup_sent_messages()  # Prevent unbounded growth
             if self.verbose:
                 console.print(f"[dim]Skipping own message: {msg.id[:8]}...[/dim]")
             return
