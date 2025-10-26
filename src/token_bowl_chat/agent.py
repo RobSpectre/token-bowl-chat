@@ -11,7 +11,6 @@ import random
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -82,6 +81,22 @@ class AgentStats:
         minutes, seconds = divmod(remainder, 60)
         return f"{hours}h {minutes}m {seconds}s"
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert stats to dictionary for JSON serialization."""
+        return {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "uptime_seconds": int(
+                (datetime.now(timezone.utc) - self.start_time).total_seconds()
+            ),
+            "messages_received": self.messages_received,
+            "messages_sent": self.messages_sent,
+            "errors": self.errors,
+            "reconnections": self.reconnections,
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
+            "start_time": self.start_time.isoformat(),
+        }
+
 
 class TokenBowlAgent:
     """An intelligent agent for Token Bowl Chat using LangChain."""
@@ -125,7 +140,16 @@ class TokenBowlAgent:
         self.server_url = server_url
         self.queue_interval = queue_interval
         self.max_reconnect_delay = max_reconnect_delay
+
+        # Validate and set context window
+        if context_window < 1000:
+            raise ValueError("context_window must be at least 1000 tokens")
+        if context_window > 1000000:
+            console.print(
+                f"[yellow]Warning: Large context window ({context_window} tokens) may consume significant RAM[/yellow]"
+            )
         self.context_window = context_window
+
         self.mcp_enabled = mcp_enabled and MCP_AVAILABLE
         self.mcp_server_url = mcp_server_url
         self.verbose = verbose
