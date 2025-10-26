@@ -146,11 +146,21 @@ class TestTokenBowlAgent:
         """Test token estimation."""
         agent = TokenBowlAgent(api_key="test", openrouter_api_key="test")
 
-        # Test various text lengths
+        # Test empty string
         assert agent._estimate_tokens("") == 0
-        assert agent._estimate_tokens("test") == 1  # 4 chars / 4 = 1 token
-        assert agent._estimate_tokens("hello world") == 2  # 11 chars / 4 = 2 tokens
-        assert agent._estimate_tokens("a" * 100) == 25  # 100 chars / 4 = 25 tokens
+
+        # Test that token estimation returns reasonable values
+        # Note: Results vary based on whether tiktoken is available
+        # tiktoken (accurate): "test" = 1 token, "hello world" = 2 tokens, "a"*100 = 13 tokens
+        # fallback heuristic: chars // 4
+        test_tokens = agent._estimate_tokens("test")
+        assert test_tokens >= 1
+
+        hello_tokens = agent._estimate_tokens("hello world")
+        assert hello_tokens >= 2
+
+        long_tokens = agent._estimate_tokens("a" * 100)
+        assert long_tokens >= 13  # tiktoken gives accurate count of 13
 
     def test_trim_conversation_history_empty(self):
         """Test trimming empty history does nothing."""

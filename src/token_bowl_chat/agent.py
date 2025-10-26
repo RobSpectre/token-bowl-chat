@@ -11,6 +11,7 @@ import random
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -166,7 +167,9 @@ class TokenBowlAgent:
 
         # Message queue and processing
         # Limit queue size to prevent unbounded growth under heavy load
-        self.message_queue: deque[MessageQueueItem] = deque(maxlen=MAX_MESSAGE_QUEUE_SIZE)
+        self.message_queue: deque[MessageQueueItem] = deque(
+            maxlen=MAX_MESSAGE_QUEUE_SIZE
+        )
         self.processing_lock = asyncio.Lock()
         self.last_flush_time = datetime.now(timezone.utc)
 
@@ -189,7 +192,9 @@ class TokenBowlAgent:
 
         # Sent message tracking for read receipts
         # Use OrderedDict to maintain insertion order for efficient cleanup
-        self.sent_messages: OrderedDict[str, str] = OrderedDict()  # message_id -> content (populated on echo)
+        self.sent_messages: OrderedDict[str, str] = (
+            OrderedDict()
+        )  # message_id -> content (populated on echo)
         self.sent_message_contents: deque[str] = deque(
             maxlen=100
         )  # Recently sent content
@@ -197,13 +202,10 @@ class TokenBowlAgent:
         # Token counting - use tiktoken if available for accuracy
         self.token_encoder: Any = None
         if TIKTOKEN_AVAILABLE:
-            try:
-                # Try to get encoding for the specific model, fall back to cl100k_base
-                # cl100k_base is used by GPT-4, GPT-3.5-turbo, and text-embedding-ada-002
+            # Try to get encoding for the specific model, fall back to cl100k_base
+            # cl100k_base is used by GPT-4, GPT-3.5-turbo, and text-embedding-ada-002
+            with contextlib.suppress(Exception):
                 self.token_encoder = tiktoken.get_encoding("cl100k_base")
-            except Exception:
-                # If that fails, tiktoken is available but we can't get the encoding
-                pass
 
     def _load_prompt(self, prompt: str | None, default: str) -> str:
         """Load a prompt from text or file path.
