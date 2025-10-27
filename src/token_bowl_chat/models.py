@@ -83,7 +83,7 @@ class MessageResponse(BaseModel):
     to_username: str | None = None
     content: str
     message_type: MessageType
-    description: str
+    description: str = ""
     timestamp: str
 
     @property
