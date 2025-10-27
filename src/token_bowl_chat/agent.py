@@ -883,8 +883,8 @@ class TokenBowlAgent:
                 f"  Max reconnect delay: {self.max_reconnect_delay}s\n"
             )
 
-            # Fetch unread messages from before connection
-            await self._fetch_unread_messages()
+            # Note: Skipping unread message fetch to avoid polluting context with old messages
+            # Agent will only respond to new messages received after startup
 
             # Start background tasks
             if not self.ws:
