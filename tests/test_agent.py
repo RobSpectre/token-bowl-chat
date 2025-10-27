@@ -679,3 +679,148 @@ class TestTokenBowlAgent:
 
             # Verify messages were marked as read
             assert agent.ws.mark_message_read.call_count == 2
+
+    def test_calculate_similarity_identical(self):
+        """Test similarity calculation for identical texts."""
+        agent = TokenBowlAgent(api_key="test", openrouter_api_key="test")
+
+        similarity = agent._calculate_similarity("Hello world", "Hello world")
+        assert similarity == 1.0
+
+    def test_calculate_similarity_different(self):
+        """Test similarity calculation for completely different texts."""
+        agent = TokenBowlAgent(api_key="test", openrouter_api_key="test")
+
+        similarity = agent._calculate_similarity(
+            "Hello world", "Completely different text"
+        )
+        assert similarity < 0.5
+
+    def test_calculate_similarity_case_insensitive(self):
+        """Test similarity calculation is case insensitive."""
+        agent = TokenBowlAgent(api_key="test", openrouter_api_key="test")
+
+        similarity = agent._calculate_similarity("Hello World", "hello world")
+        assert similarity == 1.0
+
+    def test_is_repetitive_response_no_previous_messages(self):
+        """Test that no messages returns False for repetition check."""
+        agent = TokenBowlAgent(api_key="test", openrouter_api_key="test")
+
+        # No previous messages
+        assert not agent._is_repetitive_response("Any message")
+
+    def test_is_repetitive_response_detects_similar(self):
+        """Test that similar messages are detected as repetitive."""
+        agent = TokenBowlAgent(
+            api_key="test", openrouter_api_key="test", similarity_threshold=0.85
+        )
+
+        # Add some previous messages
+        agent.sent_message_contents.append("I understand your concern.")
+        agent.sent_message_contents.append("Let me help you with that.")
+        agent.sent_message_contents.append("I understand your concern about this.")
+
+        # This should be detected as similar to the third message
+        assert agent._is_repetitive_response("I understand your concern about that.")
+
+    def test_is_repetitive_response_allows_different(self):
+        """Test that different messages are not flagged as repetitive."""
+        agent = TokenBowlAgent(
+            api_key="test", openrouter_api_key="test", similarity_threshold=0.85
+        )
+
+        # Add some previous messages
+        agent.sent_message_contents.append("I understand your concern.")
+        agent.sent_message_contents.append("Let me help you with that.")
+        agent.sent_message_contents.append("Here's some information.")
+
+        # This should not be detected as similar
+        assert not agent._is_repetitive_response(
+            "Completely different response about something else entirely."
+        )
+
+    def test_clear_conversation_memory(self):
+        """Test that conversation memory is cleared."""
+        agent = TokenBowlAgent(api_key="test", openrouter_api_key="test")
+
+        # Add some conversation history
+        agent.conversation_history.append(HumanMessage(content="Hello"))
+        agent.conversation_history.append(AIMessage(content="Hi there"))
+        agent.conversation_history.append(HumanMessage(content="How are you?"))
+
+        assert len(agent.conversation_history) == 3
+
+        # Clear memory
+        agent._clear_conversation_memory()
+
+        # Should be empty now
+        assert len(agent.conversation_history) == 0
+
+    @pytest.mark.asyncio
+    async def test_process_message_batch_detects_repetition(self):
+        """Test that repetitive responses are not sent and memory is cleared."""
+        from datetime import datetime, timezone
+
+        agent = TokenBowlAgent(
+            api_key="test",
+            openrouter_api_key="test-key",
+            mcp_enabled=False,
+            similarity_threshold=0.85,
+        )
+        await agent._initialize_llm()
+
+        # Mock the LLM to return a repetitive response
+        mock_response = MagicMock()
+        mock_response.content = "I understand your concern."
+        agent.llm = AsyncMock()
+        agent.llm.ainvoke = AsyncMock(return_value=mock_response)
+
+        # Mock WebSocket
+        agent.ws = AsyncMock()
+        agent.ws.send_typing_indicator = AsyncMock()
+        agent.ws.send_message = AsyncMock()
+
+        # Add previous similar messages
+        agent.sent_message_contents.append("I understand your concern.")
+        agent.sent_message_contents.append("I understand your concern about that.")
+        agent.sent_message_contents.append("I understand your concerns.")
+
+        # Add some conversation history
+        agent.conversation_history.append(HumanMessage(content="Previous message"))
+
+        messages = [
+            MessageQueueItem(
+                message_id="msg-1",
+                content="Hello",
+                from_username="alice",
+                to_username=None,
+                timestamp=datetime.now(timezone.utc),
+                is_direct=False,
+            )
+        ]
+
+        with patch(
+            "token_bowl_chat.agent.get_openai_callback"
+        ) as mock_callback_context:
+            mock_callback = MagicMock()
+            mock_callback.prompt_tokens = 10
+            mock_callback.completion_tokens = 20
+            mock_callback.total_tokens = 30
+            mock_callback_context.return_value.__enter__.return_value = mock_callback
+
+            await agent._process_message_batch(messages)
+
+        # Message should NOT have been sent due to repetition
+        agent.ws.send_message.assert_not_called()
+
+        # Conversation history should have been cleared
+        assert len(agent.conversation_history) == 0
+
+    def test_similarity_threshold_configurable(self):
+        """Test that similarity threshold can be configured."""
+        agent = TokenBowlAgent(
+            api_key="test", openrouter_api_key="test", similarity_threshold=0.9
+        )
+
+        assert agent.similarity_threshold == 0.9
