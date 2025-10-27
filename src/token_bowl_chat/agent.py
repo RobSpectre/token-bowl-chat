@@ -427,6 +427,7 @@ class TokenBowlAgent:
                     base_url=self.server_url,
                     on_message=self._on_message,
                     on_read_receipt=self._on_read_receipt,
+                    on_disconnect=self._on_disconnect,
                     on_error=self._on_error,
                 )
 
@@ -538,6 +539,16 @@ class TokenBowlAgent:
         # Log other errors normally
         self.stats.errors += 1
         console.print(f"[red]WebSocket error: {error_msg}[/red]")
+
+    def _on_disconnect(self) -> None:
+        """Handle WebSocket disconnection.
+
+        Called when the server closes the connection or network issues occur.
+        """
+        if self.verbose:
+            console.print(
+                "[yellow]WebSocket disconnected by server (connection may have been replaced)[/yellow]"
+            )
 
     async def _fetch_unread_messages(self) -> None:
         """Fetch all unread messages and queue them for processing."""

@@ -190,13 +190,19 @@ class TokenBowlWebSocket:
 
         except websockets.exceptions.ConnectionClosed:
             logger.info("WebSocket connection closed by server")
+            self._connected = False
+            if self.on_disconnect:
+                self.on_disconnect()
         except asyncio.CancelledError:
             logger.debug("Receive loop cancelled")
             raise
         except Exception as e:
             logger.error(f"Error in receive loop: {e}")
+            self._connected = False
             if self.on_error:
                 self.on_error(e)
+            if self.on_disconnect:
+                self.on_disconnect()
 
     async def _handle_message(self, data: dict[str, Any]) -> None:
         """Handle incoming WebSocket message based on type."""
