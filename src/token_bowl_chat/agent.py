@@ -427,6 +427,7 @@ class TokenBowlAgent:
                     base_url=self.server_url,
                     on_message=self._on_message,
                     on_read_receipt=self._on_read_receipt,
+                    on_error=self._on_error,
                 )
 
                 await self.ws.connect()
@@ -516,6 +517,27 @@ class TokenBowlAgent:
         """
         if message_id in self.sent_messages and self.verbose:
             console.print(f"[dim]✓✓ {read_by} read our message[/dim]")
+
+    def _on_error(self, error: Exception) -> None:
+        """Handle WebSocket errors.
+
+        Args:
+            error: The error that occurred
+        """
+        error_msg = str(error)
+
+        # Filter out benign server-side validation errors for typing indicators
+        # These are non-fatal and don't affect functionality
+        if "Missing content field" in error_msg:
+            if self.verbose:
+                console.print(
+                    "[dim yellow]Server validation warning (non-fatal): Missing content field[/dim yellow]"
+                )
+            return
+
+        # Log other errors normally
+        self.stats.errors += 1
+        console.print(f"[red]WebSocket error: {error_msg}[/red]")
 
     async def _fetch_unread_messages(self) -> None:
         """Fetch all unread messages and queue them for processing."""
