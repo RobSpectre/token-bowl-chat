@@ -235,10 +235,12 @@ class TokenBowlWebSocket:
         # Only treat as error if type is explicitly "error"
         # Other messages may have "error" fields for validation/info but aren't actual errors
         if msg_type == "error":
-            error = Exception(data.get("error", "Unknown error"))
+            error_msg = data.get("error", "Unknown error")
+            logger.error(f"Server error: {error_msg}")
+            logger.debug(f"Full error data: {data}")
+            error = Exception(error_msg)
             if self.on_error:
                 self.on_error(error)
-            logger.error(f"Server error: {data.get('error')}")
             return
 
         # Response messages (for request/response pattern)
@@ -280,15 +282,24 @@ class TokenBowlWebSocket:
         if not content or len(content) > 10000:
             raise ValueError("Content must be 1-10000 characters")
 
+        # Ensure content is a string
+        if not isinstance(content, str):
+            raise ValueError(f"Content must be a string, got {type(content)}")
+
         try:
             message_data: dict[str, Any] = {"content": content}
             if to_username:
                 message_data["to_username"] = to_username
 
-            await self._websocket.send(json.dumps(message_data))
+            json_str = json.dumps(message_data)
+            logger.debug(f"Sending message payload: {json_str[:200]}...")
+            await self._websocket.send(json_str)
             logger.debug(f"Sent message: {content[:50]}...")
 
         except Exception as e:
+            logger.error(
+                f"Failed to send message. Content type: {type(content)}, length: {len(content) if isinstance(content, str) else 'N/A'}"
+            )
             raise NetworkError(f"Failed to send message: {e}") from e
 
     async def mark_message_read(self, message_id: str) -> None:

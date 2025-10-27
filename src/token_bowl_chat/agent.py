@@ -199,6 +199,12 @@ class TokenBowlAgent:
             maxlen=100
         )  # Recently sent content
 
+        # Processed message tracking to prevent retry loops
+        # Track message IDs we've already attempted to process (successfully or not)
+        self.processed_message_ids: deque[str] = deque(
+            maxlen=1000
+        )  # Limit size to prevent memory leaks
+
         # Token counting - use tiktoken if available for accuracy
         self.token_encoder: Any = None
         if TIKTOKEN_AVAILABLE:
@@ -471,6 +477,14 @@ class TokenBowlAgent:
                 console.print(f"[dim]Skipping own message: {msg.id[:8]}...[/dim]")
             return
 
+        # Skip messages we've already processed to prevent retry loops
+        if msg.id in self.processed_message_ids:
+            if self.verbose:
+                console.print(
+                    f"[dim]Skipping already processed message: {msg.id[:8]}...[/dim]"
+                )
+            return
+
         # Queue message for processing
         queue_item = MessageQueueItem(
             message_id=msg.id,
@@ -531,8 +545,11 @@ class TokenBowlAgent:
 
                     # Queue each unread message for processing
                     for msg in all_unread:
-                        # Skip if we've already sent this message
-                        if msg.id in self.sent_messages:
+                        # Skip if we've already processed or sent this message
+                        if (
+                            msg.id in self.sent_messages
+                            or msg.id in self.processed_message_ids
+                        ):
                             continue
 
                         queue_item = MessageQueueItem(
@@ -578,12 +595,34 @@ class TokenBowlAgent:
         if not messages or not self.llm:
             return
 
+        # Filter out already-processed messages (deduplication)
+        new_messages = [
+            m for m in messages if m.message_id not in self.processed_message_ids
+        ]
+
+        if not new_messages:
+            if self.verbose:
+                console.print(
+                    "[dim]Skipping batch - all messages already processed[/dim]"
+                )
+            return
+
+        # Mark all messages as processed BEFORE attempting to respond
+        # This prevents retry loops even if sending fails
+        for message_item in new_messages:
+            self.processed_message_ids.append(message_item.message_id)
+
+        if self.verbose:
+            console.print(
+                f"[dim]Marked {len(new_messages)} message(s) as processed to prevent retries[/dim]"
+            )
+
         try:
             # Combine messages into a single prompt
             message_text = "\n\n".join(
                 [
                     f"{'[DM] ' if m.is_direct else ''}{m.from_username}: {m.content}"
-                    for m in messages
+                    for m in new_messages
                 ]
             )
 
@@ -662,37 +701,37 @@ class TokenBowlAgent:
                     )
                 return
 
-            # Send responses
-            for msg_item in messages:
-                try:
-                    # Decide where to send: DMs get DM replies, room messages get room replies
-                    to_username = msg_item.from_username if msg_item.is_direct else None
+            # Send response once (not once per message!)
+            try:
+                # Determine send target:
+                # - If any messages are DMs, reply as DM to the most recent sender
+                # - Otherwise, send to room
+                dm_messages = [m for m in new_messages if m.is_direct]
+                to_username = dm_messages[-1].from_username if dm_messages else None
 
-                    if self.ws:
-                        # Send typing indicator
-                        await self.ws.send_typing_indicator(to_username=to_username)
-                        await asyncio.sleep(0.5)
+                if self.ws:
+                    # Send typing indicator
+                    await self.ws.send_typing_indicator(to_username=to_username)
+                    await asyncio.sleep(0.5)
 
-                        # Track sent message content before sending
-                        # (so we can identify the echo in _on_message)
-                        self.sent_message_contents.append(response_text)
+                    # Track sent message content before sending
+                    # (so we can identify the echo in _on_message)
+                    self.sent_message_contents.append(response_text)
 
-                        # Send message (Note: WebSocket send_message returns None,
-                        # message ID tracking happens when server echoes back in _on_message)
-                        await self.ws.send_message(
-                            response_text, to_username=to_username
-                        )
+                    # Send message (Note: WebSocket send_message returns None,
+                    # message ID tracking happens when server echoes back in _on_message)
+                    await self.ws.send_message(response_text, to_username=to_username)
 
-                        self.stats.messages_sent += 1
+                    self.stats.messages_sent += 1
 
-                        msg_type = f"DM to {to_username}" if to_username else "room"
-                        console.print(
-                            f"[green]→ Sent {msg_type} response: {response_text[:100]}...[/green]"
-                        )
+                    msg_type = f"DM to {to_username}" if to_username else "room"
+                    console.print(
+                        f"[green]→ Sent {msg_type} response: {response_text[:100]}...[/green]"
+                    )
 
-                except Exception as e:
-                    self.stats.errors += 1
-                    console.print(f"[red]Error sending response: {e}[/red]")
+            except Exception as e:
+                self.stats.errors += 1
+                console.print(f"[red]Error sending response: {e}[/red]")
 
         except Exception as e:
             self.stats.errors += 1
