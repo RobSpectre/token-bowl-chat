@@ -125,6 +125,8 @@ class TokenBowlAgent:
         queue_interval: float = 30.0,
         max_reconnect_delay: float = 300.0,
         context_window: int = 128000,
+        cooldown_messages: int = 3,
+        cooldown_minutes: int = 10,
         mcp_enabled: bool = True,
         mcp_server_url: str = "https://tokenbowl-mcp.haihai.ai/sse",
         similarity_threshold: float = SIMILARITY_THRESHOLD,
@@ -142,6 +144,8 @@ class TokenBowlAgent:
             queue_interval: Seconds to wait before flushing message queue (default: 30.0)
             max_reconnect_delay: Maximum delay between reconnection attempts (seconds)
             context_window: Maximum context window in tokens (default: 128000)
+            cooldown_messages: Number of messages before cooldown starts (default: 3)
+            cooldown_minutes: Cooldown duration in minutes (default: 10)
             mcp_enabled: Enable MCP (Model Context Protocol) tools (default: True)
             mcp_server_url: MCP server URL (default: https://tokenbowl-mcp.haihai.ai/sse)
             similarity_threshold: Threshold for detecting repetitive responses (0.0-1.0, default: 0.85)
@@ -220,11 +224,11 @@ class TokenBowlAgent:
             maxlen=1000
         )  # Limit size to prevent memory leaks
 
-        # Cooldown mechanism (3 messages, then 10 minute break)
+        # Cooldown mechanism
         self.messages_sent_in_window = 0
         self.cooldown_start_time: datetime | None = None
-        self.cooldown_duration_seconds = 600  # 10 minutes
-        self.messages_per_window = 3
+        self.cooldown_duration_seconds = cooldown_minutes * 60
+        self.messages_per_window = cooldown_messages
 
         # Token counting - use tiktoken if available for accuracy
         self.token_encoder: Any = None

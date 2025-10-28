@@ -713,6 +713,16 @@ def run_agent(
         "-c",
         help="Maximum context window in tokens for conversation history",
     ),
+    cooldown_messages: int = typer.Option(
+        3,
+        "--cooldown-messages",
+        help="Number of messages before cooldown starts (default: 3)",
+    ),
+    cooldown_minutes: int = typer.Option(
+        10,
+        "--cooldown-minutes",
+        help="Cooldown duration in minutes (default: 10)",
+    ),
     mcp_enabled: bool = typer.Option(
         True,
         "--mcp/--no-mcp",
@@ -778,6 +788,8 @@ def run_agent(
             queue_interval=queue_interval,
             max_reconnect_delay=max_reconnect_delay,
             context_window=context_window,
+            cooldown_messages=cooldown_messages,
+            cooldown_minutes=cooldown_minutes,
             mcp_enabled=mcp_enabled,
             mcp_server_url=mcp_server_url,
             verbose=verbose,
