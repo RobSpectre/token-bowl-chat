@@ -67,7 +67,7 @@ class TestTokenBowlAgent:
         assert agent.api_key == "test-api-key"
         assert agent.openrouter_api_key == "test-openrouter-key"
         assert agent.model_name == "openai/gpt-4o-mini"
-        assert agent.queue_interval == 15.0
+        assert agent.queue_interval == 30.0
         assert agent.max_reconnect_delay == 300.0
         assert agent.context_window == 128000
         assert agent.mcp_enabled is True  # Default is True (if MCP available)

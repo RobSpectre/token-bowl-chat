@@ -57,6 +57,11 @@ SIMILARITY_THRESHOLD = (
 )
 SIMILARITY_CHECK_COUNT = 3  # Number of previous messages to check for similarity
 
+# Conversation history management
+MAX_CONVERSATION_HISTORY = (
+    5  # Maximum number of messages to keep in conversation history
+)
+
 
 @dataclass
 class MessageQueueItem:
@@ -117,7 +122,7 @@ class TokenBowlAgent:
         user_prompt: str | None = None,
         model_name: str = "openai/gpt-4o-mini",
         server_url: str = "wss://api.tokenbowl.ai",
-        queue_interval: float = 15.0,
+        queue_interval: float = 30.0,
         max_reconnect_delay: float = 300.0,
         context_window: int = 128000,
         mcp_enabled: bool = True,
@@ -134,7 +139,7 @@ class TokenBowlAgent:
             user_prompt: User prompt for processing messages
             model_name: OpenRouter model name (default: openai/gpt-4o-mini)
             server_url: WebSocket server URL
-            queue_interval: Seconds to wait before flushing message queue
+            queue_interval: Seconds to wait before flushing message queue (default: 30.0)
             max_reconnect_delay: Maximum delay between reconnection attempts (seconds)
             context_window: Maximum context window in tokens (default: 128000)
             mcp_enabled: Enable MCP (Model Context Protocol) tools (default: True)
@@ -363,39 +368,23 @@ class TokenBowlAgent:
         return len(text) // 4
 
     def _trim_conversation_history(self) -> None:
-        """Trim conversation history to fit within context window.
+        """Trim conversation history to keep only the last N messages.
 
-        Removes oldest messages first while keeping the conversation coherent.
-        Reserves space for system prompt, user prompt, and current messages.
+        Keeps conversation memory focused and prevents context pollution.
+        Removes oldest messages first.
         """
         if not self.conversation_history:
             return
 
-        # Reserve tokens for system/user prompts and current batch
-        reserved_tokens = (
-            self._estimate_tokens(self.system_prompt)
-            + self._estimate_tokens(self.user_prompt)
-            + 2000  # Reserve for current message batch
-        )
-
-        # Calculate available tokens for history
-        available_tokens = self.context_window - reserved_tokens
-
-        # Calculate current history token count
-        total_tokens = sum(
-            self._estimate_tokens(str(msg.content)) for msg in self.conversation_history
-        )
-
-        # Remove oldest messages until we fit in context window
-        while total_tokens > available_tokens and self.conversation_history:
+        # Remove oldest messages until we're at the limit
+        while len(self.conversation_history) > MAX_CONVERSATION_HISTORY:
             # Remove oldest message (first in list)
             removed_msg = self.conversation_history.pop(0)
-            total_tokens -= self._estimate_tokens(str(removed_msg.content))
 
             if self.verbose:
                 msg_type = "User" if isinstance(removed_msg, HumanMessage) else "AI"
                 console.print(
-                    f"[dim]Trimmed {msg_type} message from history (context window management)[/dim]"
+                    f"[dim]Trimmed {msg_type} message from history (keeping last {MAX_CONVERSATION_HISTORY} messages)[/dim]"
                 )
 
     def _cleanup_sent_messages(self) -> None:
@@ -455,6 +444,29 @@ class TokenBowlAgent:
         self.conversation_history.clear()
         if self.verbose:
             console.print("[yellow]Cleared conversation memory to reset agent[/yellow]")
+
+    async def _global_reset(self) -> None:
+        """Perform a global reset of all agent state.
+
+        Clears all conversation history, message queues, and waits for next input.
+        This provides a clean slate to break out of problematic conversation loops.
+        """
+        async with self.processing_lock:
+            # Clear conversation memory
+            self.conversation_history.clear()
+
+            # Clear message queue
+            self.message_queue.clear()
+
+            # Clear sent message tracking (except for read receipt tracking)
+            self.sent_message_contents.clear()
+
+            # Reset flush time to prevent immediate processing
+            self.last_flush_time = datetime.now(timezone.utc)
+
+            console.print(
+                "[bold yellow]🔄 Global reset performed - all state cleared, waiting for next input[/bold yellow]"
+            )
 
     async def _calculate_backoff_delay(self) -> float:
         """Calculate exponential backoff delay with jitter.
@@ -783,9 +795,9 @@ class TokenBowlAgent:
             # Check for repetitive responses
             if self._is_repetitive_response(response_text):
                 console.print(
-                    "[bold yellow]⚠️  Detected repetitive response - clearing conversation memory[/bold yellow]"
+                    "[bold yellow]⚠️  Detected repetitive response - performing global reset[/bold yellow]"
                 )
-                self._clear_conversation_memory()
+                await self._global_reset()
                 # Do not send the repetitive message
                 return
 
