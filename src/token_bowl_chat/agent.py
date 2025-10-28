@@ -220,6 +220,12 @@ class TokenBowlAgent:
             maxlen=1000
         )  # Limit size to prevent memory leaks
 
+        # Cooldown mechanism (3 messages, then 10 minute break)
+        self.messages_sent_in_window = 0
+        self.cooldown_start_time: datetime | None = None
+        self.cooldown_duration_seconds = 600  # 10 minutes
+        self.messages_per_window = 3
+
         # Token counting - use tiktoken if available for accuracy
         self.token_encoder: Any = None
         if TIKTOKEN_AVAILABLE:
@@ -620,6 +626,55 @@ class TokenBowlAgent:
                 "[yellow]WebSocket disconnected by server (connection may have been replaced)[/yellow]"
             )
 
+    def _is_in_cooldown(self) -> bool:
+        """Check if agent is currently in cooldown period.
+
+        Returns:
+            True if in cooldown, False otherwise
+        """
+        if self.cooldown_start_time is None:
+            return False
+
+        elapsed = (datetime.now(timezone.utc) - self.cooldown_start_time).total_seconds()
+        return elapsed < self.cooldown_duration_seconds
+
+    def _get_cooldown_remaining(self) -> int:
+        """Get remaining cooldown time in seconds.
+
+        Returns:
+            Remaining seconds, or 0 if not in cooldown
+        """
+        if self.cooldown_start_time is None:
+            return 0
+
+        elapsed = (datetime.now(timezone.utc) - self.cooldown_start_time).total_seconds()
+        remaining = max(0, self.cooldown_duration_seconds - elapsed)
+        return int(remaining)
+
+    def _start_cooldown(self) -> None:
+        """Start cooldown period and clear conversation history."""
+        self.cooldown_start_time = datetime.now(timezone.utc)
+        self.messages_sent_in_window = 0
+
+        # Clear conversation history to free memory
+        old_history_size = len(self.conversation_history)
+        self.conversation_history.clear()
+
+        console.print(
+            f"\n[bold yellow]🕐 Cooldown started - {self.cooldown_duration_seconds // 60} minute break[/bold yellow]"
+        )
+        console.print(
+            f"[dim yellow]Cleared {old_history_size} messages from conversation history[/dim yellow]\n"
+        )
+
+    def _end_cooldown(self) -> None:
+        """End cooldown period and reset counters."""
+        self.cooldown_start_time = None
+        self.messages_sent_in_window = 0
+        console.print(
+            "[bold green]✓ Cooldown ended - Ready to respond to messages[/bold green]\n"
+        )
+
     async def _fetch_unread_messages(self) -> None:
         """Fetch all unread messages and queue them for processing."""
         try:
@@ -697,6 +752,21 @@ class TokenBowlAgent:
         """
         if not messages or not self.llm:
             return
+
+        # Check if we're in cooldown
+        if self._is_in_cooldown():
+            remaining = self._get_cooldown_remaining()
+            minutes = remaining // 60
+            seconds = remaining % 60
+            if self.verbose:
+                console.print(
+                    f"[dim yellow]In cooldown - {minutes}m {seconds}s remaining. Skipping message batch.[/dim yellow]"
+                )
+            return
+
+        # Check if cooldown just ended
+        if self.cooldown_start_time is not None and not self._is_in_cooldown():
+            self._end_cooldown()
 
         # Filter out already-processed messages (deduplication)
         new_messages = [
@@ -840,6 +910,11 @@ class TokenBowlAgent:
                     console.print(
                         f"[green]→ Sent {msg_type} response: {response_text[:100]}...[/green]"
                     )
+
+                    # Cooldown mechanism: Track messages and start cooldown after 3 messages
+                    self.messages_sent_in_window += 1
+                    if self.messages_sent_in_window >= self.messages_per_window:
+                        self._start_cooldown()
 
             except Exception as e:
                 self.stats.errors += 1
