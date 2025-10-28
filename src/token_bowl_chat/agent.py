@@ -781,7 +781,7 @@ class TokenBowlAgent:
             # Check for repetitive responses
             if self._is_repetitive_response(response_text):
                 console.print(
-                    f"[bold yellow]⚠️  Detected repetitive response - clearing conversation memory[/bold yellow]"
+                    "[bold yellow]⚠️  Detected repetitive response - clearing conversation memory[/bold yellow]"
                 )
                 self._clear_conversation_memory()
                 # Do not send the repetitive message
