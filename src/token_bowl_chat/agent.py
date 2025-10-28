@@ -52,7 +52,9 @@ MAX_SENT_MESSAGES_TRACKED = 1000  # Limit sent message tracking to prevent memor
 MAX_MESSAGE_QUEUE_SIZE = 1000  # Maximum messages to queue before processing
 
 # Similarity detection constants
-SIMILARITY_THRESHOLD = 0.85  # Similarity threshold for detecting repetitive responses (0.0-1.0)
+SIMILARITY_THRESHOLD = (
+    0.85  # Similarity threshold for detecting repetitive responses (0.0-1.0)
+)
 SIMILARITY_CHECK_COUNT = 3  # Number of previous messages to check for similarity
 
 
