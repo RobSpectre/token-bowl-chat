@@ -144,7 +144,9 @@ cython_debug/
 *.swo
 *~
 .DS_Store
-.claude/
+
+# Claude Code local settings (contains user-specific paths)
+.claude/settings.local.json
 
 # Ruff cache
 .ruff_cache/
