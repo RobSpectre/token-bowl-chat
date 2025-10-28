@@ -11,6 +11,7 @@ import random
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +50,10 @@ console = Console()
 # Memory management constants
 MAX_SENT_MESSAGES_TRACKED = 1000  # Limit sent message tracking to prevent memory leaks
 MAX_MESSAGE_QUEUE_SIZE = 1000  # Maximum messages to queue before processing
+
+# Similarity detection constants
+SIMILARITY_THRESHOLD = 0.85  # Similarity threshold for detecting repetitive responses (0.0-1.0)
+SIMILARITY_CHECK_COUNT = 3  # Number of previous messages to check for similarity
 
 
 @dataclass
@@ -115,6 +120,7 @@ class TokenBowlAgent:
         context_window: int = 128000,
         mcp_enabled: bool = True,
         mcp_server_url: str = "https://tokenbowl-mcp.haihai.ai/sse",
+        similarity_threshold: float = SIMILARITY_THRESHOLD,
         verbose: bool = False,
     ):
         """Initialize the Token Bowl Agent.
@@ -131,6 +137,7 @@ class TokenBowlAgent:
             context_window: Maximum context window in tokens (default: 128000)
             mcp_enabled: Enable MCP (Model Context Protocol) tools (default: True)
             mcp_server_url: MCP server URL (default: https://tokenbowl-mcp.haihai.ai/sse)
+            similarity_threshold: Threshold for detecting repetitive responses (0.0-1.0, default: 0.85)
             verbose: Enable verbose logging
         """
         self.api_key = api_key or os.getenv("TOKEN_BOWL_CHAT_API_KEY", "")
@@ -153,6 +160,7 @@ class TokenBowlAgent:
 
         self.mcp_enabled = mcp_enabled and MCP_AVAILABLE
         self.mcp_server_url = mcp_server_url
+        self.similarity_threshold = similarity_threshold
         self.verbose = verbose
 
         # Load prompts
@@ -397,6 +405,54 @@ class TokenBowlAgent:
         while len(self.sent_messages) > MAX_SENT_MESSAGES_TRACKED:
             # Remove oldest entry (first item in OrderedDict)
             self.sent_messages.popitem(last=False)
+
+    def _calculate_similarity(self, text1: str, text2: str) -> float:
+        """Calculate similarity between two texts using SequenceMatcher.
+
+        Args:
+            text1: First text to compare
+            text2: Second text to compare
+
+        Returns:
+            Similarity ratio (0.0 to 1.0), where 1.0 is identical
+        """
+        return SequenceMatcher(None, text1.lower(), text2.lower()).ratio()
+
+    def _is_repetitive_response(self, response_text: str) -> bool:
+        """Check if response is too similar to recent responses.
+
+        Args:
+            response_text: The response text to check
+
+        Returns:
+            True if response is repetitive, False otherwise
+        """
+        if not self.sent_message_contents:
+            return False
+
+        # Check similarity against last N sent messages
+        recent_messages = list(self.sent_message_contents)[-SIMILARITY_CHECK_COUNT:]
+
+        for previous_message in recent_messages:
+            similarity = self._calculate_similarity(response_text, previous_message)
+            if similarity >= self.similarity_threshold:
+                if self.verbose:
+                    console.print(
+                        f"[yellow]Detected repetitive response (similarity: {similarity:.2f})[/yellow]"
+                    )
+                return True
+
+        return False
+
+    def _clear_conversation_memory(self) -> None:
+        """Clear all conversation memory to reset the agent.
+
+        This erases conversation history, allowing the agent to start fresh
+        and break out of repetitive response loops.
+        """
+        self.conversation_history.clear()
+        if self.verbose:
+            console.print("[yellow]Cleared conversation memory to reset agent[/yellow]")
 
     async def _calculate_backoff_delay(self) -> float:
         """Calculate exponential backoff delay with jitter.
@@ -714,6 +770,23 @@ class TokenBowlAgent:
             # Strip leading/trailing whitespace from response
             response_text = response_text.strip()
 
+            # Skip sending if response is empty
+            if not response_text:
+                if self.verbose:
+                    console.print(
+                        "[yellow]Skipping send - LLM returned empty response[/yellow]"
+                    )
+                return
+
+            # Check for repetitive responses
+            if self._is_repetitive_response(response_text):
+                console.print(
+                    f"[bold yellow]⚠️  Detected repetitive response - clearing conversation memory[/bold yellow]"
+                )
+                self._clear_conversation_memory()
+                # Do not send the repetitive message
+                return
+
             # Update conversation history
             self.conversation_history.append(HumanMessage(content=prompt))
             self.conversation_history.append(AIMessage(content=response_text))
@@ -725,14 +798,6 @@ class TokenBowlAgent:
                 console.print(
                     f"[dim]LLM response ({cb.total_tokens} tokens): {response_text[:100]}...[/dim]"
                 )
-
-            # Skip sending if response is empty
-            if not response_text:
-                if self.verbose:
-                    console.print(
-                        "[yellow]Skipping send - LLM returned empty response[/yellow]"
-                    )
-                return
 
             # Send response once (not once per message!)
             try:
