@@ -639,7 +639,9 @@ class TokenBowlAgent:
         if self.cooldown_start_time is None:
             return False
 
-        elapsed = (datetime.now(timezone.utc) - self.cooldown_start_time).total_seconds()
+        elapsed = (
+            datetime.now(timezone.utc) - self.cooldown_start_time
+        ).total_seconds()
         return elapsed < self.cooldown_duration_seconds
 
     def _get_cooldown_remaining(self) -> int:
@@ -651,7 +653,9 @@ class TokenBowlAgent:
         if self.cooldown_start_time is None:
             return 0
 
-        elapsed = (datetime.now(timezone.utc) - self.cooldown_start_time).total_seconds()
+        elapsed = (
+            datetime.now(timezone.utc) - self.cooldown_start_time
+        ).total_seconds()
         remaining = max(0, self.cooldown_duration_seconds - elapsed)
         return int(remaining)
 
