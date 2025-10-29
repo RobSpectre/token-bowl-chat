@@ -59,7 +59,7 @@ SIMILARITY_CHECK_COUNT = 3  # Number of previous messages to check for similarit
 
 # Conversation history management
 MAX_CONVERSATION_HISTORY = (
-    5  # Maximum number of messages to keep in conversation history
+    10  # Maximum number of messages to keep in conversation history
 )
 
 
