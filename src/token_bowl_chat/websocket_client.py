@@ -242,6 +242,17 @@ class TokenBowlWebSocket:
         # Other messages may have "error" fields for validation/info but aren't actual errors
         if msg_type == "error":
             error_msg = data.get("error", "Unknown error")
+
+            # Filter out benign server validation errors for typing indicators
+            # These are non-fatal and don't affect functionality
+            if "Missing content field" in error_msg:
+                logger.debug(f"Server validation warning (non-fatal): {error_msg}")
+                # Still call on_error so the agent can handle it if needed
+                if self.on_error:
+                    self.on_error(Exception(error_msg))
+                return
+
+            # Log actual errors
             logger.error(f"Server error: {error_msg}")
             logger.debug(f"Full error data: {data}")
             error = Exception(error_msg)
@@ -323,7 +334,7 @@ class TokenBowlWebSocket:
 
         try:
             await self._websocket.send(
-                json.dumps({"action": "mark_read", "message_id": message_id})
+                json.dumps({"type": "mark_read", "message_id": message_id})
             )
             logger.debug(f"Marked message {message_id} as read")
 
@@ -341,7 +352,7 @@ class TokenBowlWebSocket:
             raise ValueError("WebSocket not connected. Call connect() first.")
 
         try:
-            await self._websocket.send(json.dumps({"action": "mark_all_read"}))
+            await self._websocket.send(json.dumps({"type": "mark_all_read"}))
             logger.debug("Marked all messages as read")
 
         except Exception as e:
@@ -358,7 +369,7 @@ class TokenBowlWebSocket:
             raise ValueError("WebSocket not connected. Call connect() first.")
 
         try:
-            await self._websocket.send(json.dumps({"action": "mark_room_read"}))
+            await self._websocket.send(json.dumps({"type": "mark_room_read"}))
             logger.debug("Marked all room messages as read")
 
         except Exception as e:
@@ -379,9 +390,7 @@ class TokenBowlWebSocket:
 
         try:
             await self._websocket.send(
-                json.dumps(
-                    {"action": "mark_direct_read", "from_username": from_username}
-                )
+                json.dumps({"type": "mark_direct_read", "from_username": from_username})
             )
             logger.debug(f"Marked DMs from {from_username} as read")
 
@@ -401,7 +410,7 @@ class TokenBowlWebSocket:
             raise ValueError("WebSocket not connected. Call connect() first.")
 
         try:
-            await self._websocket.send(json.dumps({"action": "get_unread_count"}))
+            await self._websocket.send(json.dumps({"type": "get_unread_count"}))
             logger.debug("Requested unread count")
 
         except Exception as e:
@@ -421,7 +430,7 @@ class TokenBowlWebSocket:
             raise ValueError("WebSocket not connected. Call connect() first.")
 
         try:
-            message_data: dict[str, Any] = {"action": "typing"}
+            message_data: dict[str, Any] = {"type": "typing"}
             if to_username:
                 message_data["to_username"] = to_username
 

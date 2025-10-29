@@ -323,7 +323,7 @@ async def test_mark_message_read(mock_websocket):
 
         mock_websocket.send.assert_called_once()
         sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["action"] == "mark_read"
+        assert sent_data["type"] == "mark_read"
         assert sent_data["message_id"] == "msg123"
 
 
@@ -338,7 +338,7 @@ async def test_mark_all_messages_read(mock_websocket):
 
         mock_websocket.send.assert_called_once()
         sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["action"] == "mark_all_read"
+        assert sent_data["type"] == "mark_all_read"
 
 
 @pytest.mark.asyncio
@@ -352,7 +352,7 @@ async def test_mark_room_messages_read(mock_websocket):
 
         mock_websocket.send.assert_called_once()
         sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["action"] == "mark_room_read"
+        assert sent_data["type"] == "mark_room_read"
 
 
 @pytest.mark.asyncio
@@ -366,7 +366,7 @@ async def test_mark_direct_messages_read(mock_websocket):
 
         mock_websocket.send.assert_called_once()
         sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["action"] == "mark_direct_read"
+        assert sent_data["type"] == "mark_direct_read"
         assert sent_data["from_username"] == "alice"
 
 
@@ -381,7 +381,7 @@ async def test_get_unread_count(mock_websocket):
 
         mock_websocket.send.assert_called_once()
         sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["action"] == "get_unread_count"
+        assert sent_data["type"] == "get_unread_count"
 
 
 @pytest.mark.asyncio
@@ -395,7 +395,7 @@ async def test_send_typing_indicator_room(mock_websocket):
 
         mock_websocket.send.assert_called_once()
         sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["action"] == "typing"
+        assert sent_data["type"] == "typing"
         assert "to_username" not in sent_data
 
 
@@ -410,7 +410,7 @@ async def test_send_typing_indicator_direct(mock_websocket):
 
         mock_websocket.send.assert_called_once()
         sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["action"] == "typing"
+        assert sent_data["type"] == "typing"
         assert sent_data["to_username"] == "bob"
 
 

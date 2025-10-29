@@ -964,6 +964,17 @@ class TokenBowlAgent:
         while self.is_running:
             await asyncio.sleep(60)  # Update every minute
 
+            # Build cooldown status line
+            if self._is_in_cooldown():
+                remaining = self._get_cooldown_remaining()
+                minutes = remaining // 60
+                seconds = remaining % 60
+                cooldown_status = (
+                    f"[yellow]In cooldown ({minutes}m {seconds}s remaining)[/yellow]"
+                )
+            else:
+                cooldown_status = f"{self.messages_sent_in_window}/{self.messages_per_window} messages"
+
             console.print(
                 f"\n[bold cyan]📊 Agent Statistics[/bold cyan]\n"
                 f"  Uptime: {self.stats.uptime()}\n"
@@ -971,6 +982,7 @@ class TokenBowlAgent:
                 f"  Tokens: {self.stats.total_input_tokens} in, {self.stats.total_output_tokens} out\n"
                 f"  Reconnections: {self.stats.reconnections}\n"
                 f"  Errors: {self.stats.errors}\n"
+                f"  Cooldown: {cooldown_status}\n"
             )
 
     async def _websocket_loop_with_reconnect(self) -> None:
@@ -1074,6 +1086,17 @@ class TokenBowlAgent:
                 await self.ws.disconnect()
 
             # Final stats
+            # Build cooldown status line for final output
+            if self._is_in_cooldown():
+                remaining = self._get_cooldown_remaining()
+                minutes = remaining // 60
+                seconds = remaining % 60
+                cooldown_status = (
+                    f"[yellow]In cooldown ({minutes}m {seconds}s remaining)[/yellow]"
+                )
+            else:
+                cooldown_status = f"{self.messages_sent_in_window}/{self.messages_per_window} messages"
+
             console.print(
                 f"\n[bold cyan]📊 Final Statistics[/bold cyan]\n"
                 f"  Total uptime: {self.stats.uptime()}\n"
@@ -1081,4 +1104,5 @@ class TokenBowlAgent:
                 f"  Tokens: {self.stats.total_input_tokens} in, {self.stats.total_output_tokens} out\n"
                 f"  Reconnections: {self.stats.reconnections}\n"
                 f"  Errors: {self.stats.errors}\n"
+                f"  Cooldown: {cooldown_status}\n"
             )
