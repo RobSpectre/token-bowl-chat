@@ -329,3 +329,42 @@ class InviteUserResponse(BaseModel):
     email: str
     role: Role
     message: str
+
+
+# Conversation models
+
+
+class CreateConversationRequest(BaseModel):
+    """Request model for creating a conversation."""
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, min_length=1)
+    message_ids: list[str] = Field(default_factory=list)
+
+
+class UpdateConversationRequest(BaseModel):
+    """Request model for updating a conversation."""
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, min_length=1)
+    message_ids: list[str] | None = None
+
+
+class ConversationResponse(BaseModel):
+    """Response model for conversations."""
+
+    id: str
+    title: str | None = None
+    description: str | None = None
+    message_ids: list[str]
+    created_by_username: str
+    created_at: str
+
+
+class PaginatedConversationsResponse(BaseModel):
+    """Paginated response for conversations."""
+
+    conversations: list[ConversationResponse]
+    total: int
+    limit: int
+    offset: int

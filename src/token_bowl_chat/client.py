@@ -21,6 +21,8 @@ from .models import (
     AssignRoleRequest,
     AssignRoleResponse,
     BotProfileResponse,
+    ConversationResponse,
+    PaginatedConversationsResponse,
     CreateBotRequest,
     CreateBotResponse,
     InviteUserRequest,
@@ -934,6 +936,154 @@ class TokenBowlClient:
             requires_auth=True,
         )
         return cast(dict[str, str], response.json())
+
+    # Conversation methods
+
+    def create_conversation(
+        self,
+        title: str | None = None,
+        description: str | None = None,
+        message_ids: list[str] | None = None,
+    ) -> ConversationResponse:
+        """Create a new conversation.
+
+        Args:
+            title: Optional conversation title (max 200 chars)
+            description: Optional conversation description
+            message_ids: List of message IDs to include in conversation
+
+        Returns:
+            Created conversation
+
+        Raises:
+            ValidationError: If validation fails
+            AuthenticationError: If not authenticated
+        """
+        from .models import CreateConversationRequest
+
+        request_data = CreateConversationRequest(
+            title=title,
+            description=description,
+            message_ids=message_ids or [],
+        )
+        response = self._request(
+            "POST",
+            "/conversations",
+            json_data=request_data.model_dump(exclude_none=True),
+            requires_auth=True,
+        )
+        from .models import ConversationResponse
+
+        return ConversationResponse.model_validate(response.json())
+
+    def get_conversations(
+        self, limit: int = 100, offset: int = 0
+    ) -> PaginatedConversationsResponse:
+        """Get conversations created by current user (or all if viewer).
+
+        Viewers can see all conversations from all users.
+        Regular users can only see their own conversations.
+
+        Args:
+            limit: Maximum number of conversations to return (default: 100)
+            offset: Number of conversations to skip (default: 0)
+
+        Returns:
+            Paginated list of conversations
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        from .models import PaginatedConversationsResponse
+
+        response = self._request(
+            "GET",
+            "/conversations",
+            params={"limit": limit, "offset": offset},
+            requires_auth=True,
+        )
+        return PaginatedConversationsResponse.model_validate(response.json())
+
+    def get_conversation(self, conversation_id: str) -> ConversationResponse:
+        """Get a specific conversation.
+
+        Viewers can view any conversation.
+        Regular users can only view their own conversations.
+
+        Args:
+            conversation_id: Conversation UUID
+
+        Returns:
+            Conversation details
+
+        Raises:
+            NotFoundError: If conversation not found
+            AuthenticationError: If not authenticated or not authorized
+        """
+        from .models import ConversationResponse
+
+        response = self._request(
+            "GET",
+            f"/conversations/{conversation_id}",
+            requires_auth=True,
+        )
+        return ConversationResponse.model_validate(response.json())
+
+    def update_conversation(
+        self,
+        conversation_id: str,
+        title: str | None = None,
+        description: str | None = None,
+        message_ids: list[str] | None = None,
+    ) -> ConversationResponse:
+        """Update a conversation.
+
+        Args:
+            conversation_id: Conversation UUID
+            title: Optional new title
+            description: Optional new description
+            message_ids: Optional new list of message IDs
+
+        Returns:
+            Updated conversation
+
+        Raises:
+            NotFoundError: If conversation not found
+            ValidationError: If validation fails
+            AuthenticationError: If not authenticated or not authorized
+        """
+        from .models import UpdateConversationRequest
+
+        request_data = UpdateConversationRequest(
+            title=title,
+            description=description,
+            message_ids=message_ids,
+        )
+        response = self._request(
+            "PATCH",
+            f"/conversations/{conversation_id}",
+            json_data=request_data.model_dump(exclude_none=True),
+            requires_auth=True,
+        )
+        from .models import ConversationResponse
+
+        return ConversationResponse.model_validate(response.json())
+
+    def delete_conversation(self, conversation_id: str) -> None:
+        """Delete a conversation.
+
+        Args:
+            conversation_id: Conversation UUID
+
+        Raises:
+            NotFoundError: If conversation not found
+            AuthenticationError: If not authenticated or not authorized
+        """
+        self._request(
+            "DELETE",
+            f"/conversations/{conversation_id}",
+            requires_auth=True,
+        )
 
     def health_check(self) -> dict[str, str]:
         """Check server health status.

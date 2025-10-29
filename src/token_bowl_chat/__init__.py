@@ -17,9 +17,12 @@ from .exceptions import (
 from .models import (
     AdminMessageUpdate,
     AdminUpdateUserRequest,
+    ConversationResponse,
+    CreateConversationRequest,
     HTTPValidationError,
     MessageResponse,
     MessageType,
+    PaginatedConversationsResponse,
     PaginatedMessagesResponse,
     PaginationMetadata,
     PublicUserProfile,
@@ -30,6 +33,7 @@ from .models import (
     StytchLoginRequest,
     StytchLoginResponse,
     UnreadCountResponse,
+    UpdateConversationRequest,
     UpdateLogoRequest,
     UpdateUsernameRequest,
     UpdateWebhookRequest,
@@ -39,7 +43,7 @@ from .models import (
 )
 from .websocket_client import TokenBowlWebSocket
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __all__ = [
     "__version__",
     # Clients
@@ -69,6 +73,10 @@ __all__ = [
     "AdminUpdateUserRequest",
     "AdminMessageUpdate",
     "HTTPValidationError",
+    "ConversationResponse",
+    "CreateConversationRequest",
+    "UpdateConversationRequest",
+    "PaginatedConversationsResponse",
     # Exceptions
     "TokenBowlError",
     "AuthenticationError",
