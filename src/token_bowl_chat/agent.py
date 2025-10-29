@@ -127,6 +127,7 @@ class TokenBowlAgent:
         context_window: int = 128000,
         cooldown_messages: int = 3,
         cooldown_minutes: int = 10,
+        max_conversation_history: int = 10,
         mcp_enabled: bool = True,
         mcp_server_url: str = "https://tokenbowl-mcp.haihai.ai/sse",
         similarity_threshold: float = SIMILARITY_THRESHOLD,
@@ -146,6 +147,7 @@ class TokenBowlAgent:
             context_window: Maximum context window in tokens (default: 128000)
             cooldown_messages: Number of messages before cooldown starts (default: 3)
             cooldown_minutes: Cooldown duration in minutes (default: 10)
+            max_conversation_history: Maximum number of messages to keep in conversation history (default: 10)
             mcp_enabled: Enable MCP (Model Context Protocol) tools (default: True)
             mcp_server_url: MCP server URL (default: https://tokenbowl-mcp.haihai.ai/sse)
             similarity_threshold: Threshold for detecting repetitive responses (0.0-1.0, default: 0.85)
@@ -168,6 +170,15 @@ class TokenBowlAgent:
                 f"[yellow]Warning: Large context window ({context_window} tokens) may consume significant RAM[/yellow]"
             )
         self.context_window = context_window
+
+        # Validate and set max conversation history
+        if max_conversation_history < 1:
+            raise ValueError("max_conversation_history must be at least 1")
+        if max_conversation_history > 100:
+            console.print(
+                f"[yellow]Warning: Large conversation history ({max_conversation_history} messages) may consume significant memory[/yellow]"
+            )
+        self.max_conversation_history = max_conversation_history
 
         self.mcp_enabled = mcp_enabled and MCP_AVAILABLE
         self.mcp_server_url = mcp_server_url
@@ -387,14 +398,14 @@ class TokenBowlAgent:
             return
 
         # Remove oldest messages until we're at the limit
-        while len(self.conversation_history) > MAX_CONVERSATION_HISTORY:
+        while len(self.conversation_history) > self.max_conversation_history:
             # Remove oldest message (first in list)
             removed_msg = self.conversation_history.pop(0)
 
             if self.verbose:
                 msg_type = "User" if isinstance(removed_msg, HumanMessage) else "AI"
                 console.print(
-                    f"[dim]Trimmed {msg_type} message from history (keeping last {MAX_CONVERSATION_HISTORY} messages)[/dim]"
+                    f"[dim]Trimmed {msg_type} message from history (keeping last {self.max_conversation_history} messages)[/dim]"
                 )
 
     def _cleanup_sent_messages(self) -> None:

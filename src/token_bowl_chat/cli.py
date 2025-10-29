@@ -723,6 +723,11 @@ def run_agent(
         "--cooldown-minutes",
         help="Cooldown duration in minutes (default: 10)",
     ),
+    max_conversation_history: int = typer.Option(
+        10,
+        "--max-conversation-history",
+        help="Maximum number of messages to keep in conversation history (default: 10)",
+    ),
     mcp_enabled: bool = typer.Option(
         True,
         "--mcp/--no-mcp",
@@ -790,6 +795,7 @@ def run_agent(
             context_window=context_window,
             cooldown_messages=cooldown_messages,
             cooldown_minutes=cooldown_minutes,
+            max_conversation_history=max_conversation_history,
             mcp_enabled=mcp_enabled,
             mcp_server_url=mcp_server_url,
             verbose=verbose,
