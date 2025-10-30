@@ -18,7 +18,8 @@ You are helping create a new release. Follow these steps:
 5. **Calculate and update version**:
    - Parse the current version (format: MAJOR.MINOR.PATCH)
    - Increment the appropriate part based on user's choice
-   - Update the version in `pyproject.toml`
+   - Update the version in BOTH `pyproject.toml` AND `src/token_bowl_chat/__init__.py`
+   - CRITICAL: Both files must have the exact same version or tests will fail
 
 6. **Commit changes**: Create a commit with the message: `Bump version to X.Y.Z`
 
