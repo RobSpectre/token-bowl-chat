@@ -911,10 +911,6 @@ class TokenBowlAgent:
                 to_username = dm_messages[-1].from_username if dm_messages else None
 
                 if self.ws:
-                    # Send typing indicator
-                    await self.ws.send_typing_indicator(to_username=to_username)
-                    await asyncio.sleep(0.5)
-
                     # Track sent message content before sending
                     # (so we can identify the echo in _on_message)
                     self.sent_message_contents.append(response_text)
