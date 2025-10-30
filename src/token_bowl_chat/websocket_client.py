@@ -208,6 +208,13 @@ class TokenBowlWebSocket:
         """Handle incoming WebSocket message based on type."""
         msg_type = data.get("type")
 
+        # Heartbeat: respond to ping with pong to keep connection alive
+        if msg_type == "ping":
+            if self._websocket:
+                await self._websocket.send(json.dumps({"type": "pong"}))
+                logger.debug("Received ping, sent pong")
+            return
+
         # Confirmation messages (message_sent, marked_read, marked_all_read, etc.)
         # Check these first before error handling, as they may contain validation messages
         if msg_type in ("message_sent", "marked_read", "marked_all_read"):
