@@ -574,3 +574,32 @@ async def test_connect_without_api_key():
 
     with pytest.raises(AuthenticationError, match="API key required"):
         await client.connect()
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_ping_pong():
+    """Test that client responds to server ping with pong."""
+    ping_data = {"type": "ping", "timestamp": "2024-01-20T15:30:45.123456+00:00"}
+
+    mock_ws = AsyncMock()
+    mock_ws.send = AsyncMock()
+    mock_ws.close = AsyncMock()
+
+    async def message_generator():
+        yield json.dumps(ping_data)
+
+    mock_ws.__aiter__ = lambda self: message_generator()
+
+    with patch("websockets.connect", new=AsyncMock(return_value=mock_ws)):
+        client = TokenBowlWebSocket(api_key="test-key")
+        await client.connect()
+
+        # Wait for ping to be processed
+        await asyncio.sleep(0.1)
+
+        # Verify pong was sent
+        mock_ws.send.assert_called()
+        sent_data = json.loads(mock_ws.send.call_args[0][0])
+        assert sent_data["type"] == "pong"
+
+        await client.disconnect()
