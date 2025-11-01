@@ -728,6 +728,21 @@ def run_agent(
         "--max-conversation-history",
         help="Maximum number of messages to keep in conversation history (default: 10)",
     ),
+    max_retry_attempts: int = typer.Option(
+        3,
+        "--max-retry-attempts",
+        help="Maximum number of retry attempts per failed message (default: 3)",
+    ),
+    retry_base_delay: float = typer.Option(
+        5.0,
+        "--retry-base-delay",
+        help="Base delay in seconds for exponential backoff (default: 5.0)",
+    ),
+    max_retry_delay: float = typer.Option(
+        60.0,
+        "--max-retry-delay",
+        help="Maximum retry delay in seconds (default: 60.0)",
+    ),
     mcp_enabled: bool = typer.Option(
         True,
         "--mcp/--no-mcp",
@@ -798,6 +813,9 @@ def run_agent(
             max_conversation_history=max_conversation_history,
             mcp_enabled=mcp_enabled,
             mcp_server_url=mcp_server_url,
+            max_retry_attempts=max_retry_attempts,
+            retry_base_delay=retry_base_delay,
+            max_retry_delay=max_retry_delay,
             verbose=verbose,
         )
 

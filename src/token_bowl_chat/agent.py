@@ -62,6 +62,11 @@ MAX_CONVERSATION_HISTORY = (
     10  # Maximum number of messages to keep in conversation history
 )
 
+# Retry mechanism constants
+MAX_RETRY_ATTEMPTS = 3  # Maximum number of retry attempts per message
+RETRY_BASE_DELAY = 5  # Base delay in seconds for exponential backoff
+MAX_RETRY_DELAY = 60  # Maximum retry delay in seconds
+
 
 @dataclass
 class MessageQueueItem:
@@ -73,6 +78,9 @@ class MessageQueueItem:
     to_username: str | None
     timestamp: datetime
     is_direct: bool
+    retry_count: int = 0
+    last_attempt_time: datetime | None = None
+    last_error: str | None = None
 
 
 @dataclass
@@ -85,6 +93,8 @@ class AgentStats:
     reconnections: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
+    retries: int = 0
+    messages_failed_permanently: int = 0
     start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def uptime(self) -> str:
@@ -107,6 +117,8 @@ class AgentStats:
             "reconnections": self.reconnections,
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
+            "retries": self.retries,
+            "messages_failed_permanently": self.messages_failed_permanently,
             "start_time": self.start_time.isoformat(),
         }
 
@@ -131,6 +143,9 @@ class TokenBowlAgent:
         mcp_enabled: bool = True,
         mcp_server_url: str = "https://tokenbowl-mcp.haihai.ai/sse",
         similarity_threshold: float = SIMILARITY_THRESHOLD,
+        max_retry_attempts: int = MAX_RETRY_ATTEMPTS,
+        retry_base_delay: float = RETRY_BASE_DELAY,
+        max_retry_delay: float = MAX_RETRY_DELAY,
         verbose: bool = False,
     ):
         """Initialize the Token Bowl Agent.
@@ -151,6 +166,9 @@ class TokenBowlAgent:
             mcp_enabled: Enable MCP (Model Context Protocol) tools (default: True)
             mcp_server_url: MCP server URL (default: https://tokenbowl-mcp.haihai.ai/sse)
             similarity_threshold: Threshold for detecting repetitive responses (0.0-1.0, default: 0.85)
+            max_retry_attempts: Maximum number of retry attempts per message (default: 3)
+            retry_base_delay: Base delay in seconds for exponential backoff (default: 5)
+            max_retry_delay: Maximum retry delay in seconds (default: 60)
             verbose: Enable verbose logging
         """
         self.api_key = api_key or os.getenv("TOKEN_BOWL_CHAT_API_KEY", "")
@@ -200,8 +218,16 @@ class TokenBowlAgent:
         self.message_queue: deque[MessageQueueItem] = deque(
             maxlen=MAX_MESSAGE_QUEUE_SIZE
         )
+        self.failed_messages: deque[MessageQueueItem] = deque(
+            maxlen=MAX_MESSAGE_QUEUE_SIZE
+        )
         self.processing_lock = asyncio.Lock()
         self.last_flush_time = datetime.now(timezone.utc)
+
+        # Retry configuration
+        self.max_retry_attempts = max_retry_attempts
+        self.retry_base_delay = retry_base_delay
+        self.max_retry_delay = max_retry_delay
 
         # WebSocket and reconnection state
         self.ws: TokenBowlWebSocket | None = None
@@ -694,6 +720,91 @@ class TokenBowlAgent:
             "[bold green]✓ Cooldown ended - Ready to respond to messages[/bold green]\n"
         )
 
+    def _calculate_retry_delay(self, retry_count: int) -> float:
+        """Calculate exponential backoff delay for retries.
+
+        Args:
+            retry_count: Number of previous retry attempts
+
+        Returns:
+            Delay in seconds before next retry attempt
+        """
+        import random
+
+        # Exponential backoff: base_delay * 2^retry_count
+        delay = self.retry_base_delay * (2**retry_count)
+
+        # Cap at max_retry_delay
+        delay = min(delay, self.max_retry_delay)
+
+        # Add jitter to prevent thundering herd (±10%)
+        jitter = random.uniform(-0.1 * delay, 0.1 * delay)
+
+        return float(delay + jitter)
+
+    def _should_retry_message(self, message: MessageQueueItem) -> bool:
+        """Check if a message should be retried.
+
+        Args:
+            message: The message to check
+
+        Returns:
+            True if the message should be retried, False otherwise
+        """
+        # Don't retry if we've exceeded max attempts
+        if message.retry_count >= self.max_retry_attempts:
+            return False
+
+        # If this is the first attempt, always try
+        if message.last_attempt_time is None:
+            return True
+
+        # Check if enough time has passed since last attempt
+        delay = self._calculate_retry_delay(message.retry_count)
+        elapsed = (
+            datetime.now(timezone.utc) - message.last_attempt_time
+        ).total_seconds()
+
+        return elapsed >= delay
+
+    def _requeue_failed_messages(self) -> None:
+        """Check failed messages and requeue those ready for retry."""
+        if not self.failed_messages:
+            return
+
+        messages_to_retry: list[MessageQueueItem] = []
+        messages_to_keep: list[MessageQueueItem] = []
+
+        # Check each failed message
+        for msg in self.failed_messages:
+            if self._should_retry_message(msg):
+                messages_to_retry.append(msg)
+            elif msg.retry_count < self.max_retry_attempts:
+                # Not ready yet, keep in failed queue
+                messages_to_keep.append(msg)
+            else:
+                # Permanently failed
+                self.stats.messages_failed_permanently += 1
+                if self.verbose:
+                    console.print(
+                        f"[red]✗ Message {msg.message_id} failed permanently after {msg.retry_count} attempts: {msg.last_error}[/red]"
+                    )
+
+        # Update failed queue
+        self.failed_messages.clear()
+        self.failed_messages.extend(messages_to_keep)
+
+        # Requeue messages ready for retry
+        for msg in messages_to_retry:
+            msg.retry_count += 1
+            msg.last_attempt_time = datetime.now(timezone.utc)
+            self.stats.retries += 1
+            if self.verbose:
+                console.print(
+                    f"[yellow]🔄 Retrying message {msg.message_id} (attempt {msg.retry_count}/{self.max_retry_attempts})[/yellow]"
+                )
+            self.message_queue.append(msg)
+
     async def _fetch_unread_messages(self) -> None:
         """Fetch all unread messages and queue them for processing."""
         try:
@@ -799,15 +910,12 @@ class TokenBowlAgent:
                 )
             return
 
-        # Mark all messages as processed BEFORE attempting to respond
-        # This prevents retry loops even if sending fails
+        # Update attempt time for all messages in batch
         for message_item in new_messages:
-            self.processed_message_ids.append(message_item.message_id)
+            message_item.last_attempt_time = datetime.now(timezone.utc)
 
         if self.verbose:
-            console.print(
-                f"[dim]Marked {len(new_messages)} message(s) as processed to prevent retries[/dim]"
-            )
+            console.print(f"[dim]Processing {len(new_messages)} message(s)...[/dim]")
 
         try:
             # Combine messages into a single prompt
@@ -931,19 +1039,53 @@ class TokenBowlAgent:
                     if self.messages_sent_in_window >= self.messages_per_window:
                         self._start_cooldown()
 
+                    # SUCCESS: Mark messages as processed only after successful send
+                    for message_item in new_messages:
+                        self.processed_message_ids.append(message_item.message_id)
+
+                    if self.verbose:
+                        console.print(
+                            f"[dim]✓ Successfully processed and sent response for {len(new_messages)} message(s)[/dim]"
+                        )
+
             except Exception as e:
                 self.stats.errors += 1
-                console.print(f"[red]Error sending response: {e}[/red]")
+                error_msg = str(e)
+                console.print(f"[red]Error sending response: {error_msg}[/red]")
+
+                # Add messages to failed queue for retry
+                for message_item in new_messages:
+                    message_item.last_error = f"Send error: {error_msg}"
+                    self.failed_messages.append(message_item)
+
+                if self.verbose:
+                    console.print(
+                        f"[yellow]Added {len(new_messages)} message(s) to retry queue[/yellow]"
+                    )
 
         except Exception as e:
             self.stats.errors += 1
-            console.print(f"[red]Error processing messages: {e}[/red]")
+            error_msg = str(e)
+            console.print(f"[red]Error processing messages: {error_msg}[/red]")
+
+            # Add messages to failed queue for retry
+            for message_item in new_messages:
+                message_item.last_error = f"Processing error: {error_msg}"
+                self.failed_messages.append(message_item)
+
+            if self.verbose:
+                console.print(
+                    f"[yellow]Added {len(new_messages)} message(s) to retry queue[/yellow]"
+                )
 
     async def _message_processor_loop(self) -> None:
         """Background loop to process queued messages."""
         while self.is_running:
             try:
                 await asyncio.sleep(1)  # Check every second
+
+                # Check failed messages and requeue those ready for retry
+                self._requeue_failed_messages()
 
                 # Check if it's time to flush
                 time_since_last_flush = (
@@ -982,13 +1124,22 @@ class TokenBowlAgent:
             else:
                 cooldown_status = f"{self.messages_sent_in_window}/{self.messages_per_window} messages"
 
+            # Build retry status line
+            retry_status = f"{self.stats.retries} retries"
+            if self.failed_messages:
+                retry_status += f", {len(self.failed_messages)} pending"
+            if self.stats.messages_failed_permanently > 0:
+                retry_status += (
+                    f", {self.stats.messages_failed_permanently} failed permanently"
+                )
+
             console.print(
                 f"\n[bold cyan]📊 Agent Statistics[/bold cyan]\n"
                 f"  Uptime: {self.stats.uptime()}\n"
                 f"  Messages: {self.stats.messages_received} received, {self.stats.messages_sent} sent\n"
                 f"  Tokens: {self.stats.total_input_tokens} in, {self.stats.total_output_tokens} out\n"
                 f"  Reconnections: {self.stats.reconnections}\n"
-                f"  Errors: {self.stats.errors}\n"
+                f"  Errors: {self.stats.errors} ({retry_status})\n"
                 f"  Cooldown: {cooldown_status}\n"
             )
 
@@ -1104,12 +1255,21 @@ class TokenBowlAgent:
             else:
                 cooldown_status = f"{self.messages_sent_in_window}/{self.messages_per_window} messages"
 
+            # Build final retry status line
+            retry_status = f"{self.stats.retries} retries"
+            if self.failed_messages:
+                retry_status += f", {len(self.failed_messages)} pending"
+            if self.stats.messages_failed_permanently > 0:
+                retry_status += (
+                    f", {self.stats.messages_failed_permanently} failed permanently"
+                )
+
             console.print(
                 f"\n[bold cyan]📊 Final Statistics[/bold cyan]\n"
                 f"  Total uptime: {self.stats.uptime()}\n"
                 f"  Messages: {self.stats.messages_received} received, {self.stats.messages_sent} sent\n"
                 f"  Tokens: {self.stats.total_input_tokens} in, {self.stats.total_output_tokens} out\n"
                 f"  Reconnections: {self.stats.reconnections}\n"
-                f"  Errors: {self.stats.errors}\n"
+                f"  Errors: {self.stats.errors} ({retry_status})\n"
                 f"  Cooldown: {cooldown_status}\n"
             )
