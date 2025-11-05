@@ -5,6 +5,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -196,12 +197,14 @@ class TokenBowlWebSocket:
             logger.info("WebSocket connection closed")
             self._connected = False
             self._connecting = False
+            # Don't clear subscriptions - we'll reuse them on reconnect
             if self.on_disconnect:
                 self.on_disconnect()
         except Exception as e:
             logger.error(f"Error in receive loop: {e}")
             self._connected = False
             self._connecting = False
+            # Don't clear subscriptions - we'll reuse them on reconnect
             if self.on_error:
                 self.on_error(e)
             if self.on_disconnect:
@@ -269,9 +272,22 @@ class TokenBowlWebSocket:
             error = data["error"]
             code = error.get("code")
             message = error.get("message", "Unknown error")
-            logger.error(f"Centrifugo error {code}: {message}")
-            if self.on_error:
-                self.on_error(Exception(f"Centrifugo error {code}: {message}"))
+
+            # Error code 105 is "already subscribed" - this is expected on reconnect
+            if code == 105:
+                # Extract channel from the message if possible
+                # Message format is usually "already subscribed on channel room:main"
+                match = re.search(r"channel (\S+)", message)
+                if match:
+                    channel = match.group(1)
+                    self._subscriptions.add(channel)
+                    logger.debug(f"Already subscribed to {channel} (expected on reconnect)")
+                else:
+                    logger.debug(f"Already subscribed (expected on reconnect): {message}")
+            else:
+                logger.error(f"Centrifugo error {code}: {message}")
+                if self.on_error:
+                    self.on_error(Exception(f"Centrifugo error {code}: {message}"))
 
         # Handle ping response (pong)
         elif "pong" in data:
@@ -361,10 +377,17 @@ class TokenBowlWebSocket:
                     },
                 }
                 await self._websocket.send(json.dumps(subscribe_cmd))
-                logger.debug(f"Subscribing to channel: {channel}")
+                logger.debug(f"Attempting to subscribe to channel: {channel}")
+            else:
+                logger.debug(f"Already tracking subscription to channel: {channel}")
 
-    async def disconnect(self) -> None:
-        """Disconnect from the server."""
+    async def disconnect(self, clear_state: bool = True) -> None:
+        """Disconnect from the server.
+
+        Args:
+            clear_state: If True, clear all state (for full disconnect).
+                        If False, preserve state for reconnection.
+        """
         self._connected = False
         self._connecting = False
 
@@ -384,10 +407,12 @@ class TokenBowlWebSocket:
             await self._websocket.close()
             self._websocket = None
 
-        self._subscriptions.clear()
-        self._message_ids.clear()
-        self._client_id = None
-        self._command_id = 1
+        # Only clear state if explicitly requested (full disconnect)
+        if clear_state:
+            self._subscriptions.clear()
+            self._message_ids.clear()
+            self._client_id = None
+            self._command_id = 1
 
     async def send_message(
         self, content: str, to_username: str | None = None, **_kwargs: Any
