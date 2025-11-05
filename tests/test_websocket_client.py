@@ -29,7 +29,7 @@ def mock_httpx_response():
         "url": "ws://localhost:8001/connection/websocket",
         "token": "test-jwt-token",
         "channels": ["room:main", "user:testuser"],
-        "user": "testuser"
+        "user": "testuser",
     }
     response.raise_for_status = MagicMock()
     return response
@@ -48,11 +48,7 @@ async def test_connect_success(mock_websocket, mock_httpx_response):
             client = TokenBowlWebSocket(api_key="test-key")
 
             # Mock the receive loop to simulate connect response
-            connect_response = json.dumps({
-                "connect": {
-                    "client": "test-client-id"
-                }
-            })
+            connect_response = json.dumps({"connect": {"client": "test-client-id"}})
             mock_websocket.__aiter__ = MagicMock(return_value=iter([connect_response]))
 
             await client.connect()
@@ -161,21 +157,23 @@ async def test_handle_incoming_message(mock_websocket, mock_httpx_response):
             # Simulate connect and then message
             messages = [
                 json.dumps({"connect": {"client": "test-client-id"}}),
-                json.dumps({
-                    "push": {
-                        "channel": "room:main",
-                        "pub": {
-                            "data": {
-                                "id": "msg-123",
-                                "content": "Test message",
-                                "from_username": "alice",
-                                "from_user_id": "user-123",
-                                "timestamp": "2024-01-01T00:00:00Z",
-                                "message_type": "room"
-                            }
+                json.dumps(
+                    {
+                        "push": {
+                            "channel": "room:main",
+                            "pub": {
+                                "data": {
+                                    "id": "msg-123",
+                                    "content": "Test message",
+                                    "from_username": "alice",
+                                    "from_user_id": "user-123",
+                                    "timestamp": "2024-01-01T00:00:00Z",
+                                    "message_type": "room",
+                                }
+                            },
                         }
                     }
-                })
+                ),
             ]
             mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
 
@@ -207,36 +205,40 @@ async def test_duplicate_message_ignored(mock_websocket, mock_httpx_response):
             # Send the same message twice
             messages = [
                 json.dumps({"connect": {"client": "test-client-id"}}),
-                json.dumps({
-                    "push": {
-                        "channel": "room:main",
-                        "pub": {
-                            "data": {
-                                "id": "msg-123",
-                                "content": "Test message",
-                                "from_username": "alice",
-                                "from_user_id": "user-123",
-                                "timestamp": "2024-01-01T00:00:00Z",
-                                "message_type": "room"
-                            }
+                json.dumps(
+                    {
+                        "push": {
+                            "channel": "room:main",
+                            "pub": {
+                                "data": {
+                                    "id": "msg-123",
+                                    "content": "Test message",
+                                    "from_username": "alice",
+                                    "from_user_id": "user-123",
+                                    "timestamp": "2024-01-01T00:00:00Z",
+                                    "message_type": "room",
+                                }
+                            },
                         }
                     }
-                }),
-                json.dumps({
-                    "push": {
-                        "channel": "room:main",
-                        "pub": {
-                            "data": {
-                                "id": "msg-123",  # Same ID
-                                "content": "Test message",
-                                "from_username": "alice",
-                                "from_user_id": "user-123",
-                                "timestamp": "2024-01-01T00:00:00Z",
-                                "message_type": "room"
-                            }
+                ),
+                json.dumps(
+                    {
+                        "push": {
+                            "channel": "room:main",
+                            "pub": {
+                                "data": {
+                                    "id": "msg-123",  # Same ID
+                                    "content": "Test message",
+                                    "from_username": "alice",
+                                    "from_user_id": "user-123",
+                                    "timestamp": "2024-01-01T00:00:00Z",
+                                    "message_type": "room",
+                                }
+                            },
                         }
                     }
-                })
+                ),
             ]
             mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
 
@@ -260,9 +262,11 @@ async def test_disconnect(mock_websocket, mock_httpx_response):
             client = TokenBowlWebSocket(api_key="test-key")
 
             # Connect
-            mock_websocket.__aiter__ = MagicMock(return_value=iter([
-                json.dumps({"connect": {"client": "test-client-id"}})
-            ]))
+            mock_websocket.__aiter__ = MagicMock(
+                return_value=iter(
+                    [json.dumps({"connect": {"client": "test-client-id"}})]
+                )
+            )
             await client.connect()
             await asyncio.sleep(0.1)
 
@@ -285,9 +289,11 @@ async def test_context_manager(mock_websocket, mock_httpx_response):
         mock_client_class.return_value = mock_client
 
         with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-            mock_websocket.__aiter__ = MagicMock(return_value=iter([
-                json.dumps({"connect": {"client": "test-client-id"}})
-            ]))
+            mock_websocket.__aiter__ = MagicMock(
+                return_value=iter(
+                    [json.dumps({"connect": {"client": "test-client-id"}})]
+                )
+            )
 
             async with TokenBowlWebSocket(api_key="test-key") as client:
                 await asyncio.sleep(0.1)
@@ -391,26 +397,27 @@ async def test_handle_read_receipt(mock_websocket, mock_httpx_response):
 
         with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
             client = TokenBowlWebSocket(
-                api_key="test-key",
-                on_read_receipt=on_read_receipt
+                api_key="test-key", on_read_receipt=on_read_receipt
             )
 
             # Simulate connect and then read receipt
             messages = [
                 json.dumps({"connect": {"client": "test-client-id"}}),
-                json.dumps({
-                    "push": {
-                        "channel": "room:main",
-                        "pub": {
-                            "data": {
-                                "type": "read_receipt",
-                                "message_id": "msg-123",
-                                "read_by": "alice",
-                                "read_at": "2024-01-01T00:00:00Z"
-                            }
+                json.dumps(
+                    {
+                        "push": {
+                            "channel": "room:main",
+                            "pub": {
+                                "data": {
+                                    "type": "read_receipt",
+                                    "message_id": "msg-123",
+                                    "read_by": "alice",
+                                    "read_at": "2024-01-01T00:00:00Z",
+                                }
+                            },
                         }
                     }
-                })
+                ),
             ]
             mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
 
@@ -436,27 +443,26 @@ async def test_handle_typing_indicator(mock_websocket, mock_httpx_response):
         mock_client_class.return_value = mock_client
 
         with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-            client = TokenBowlWebSocket(
-                api_key="test-key",
-                on_typing=on_typing
-            )
+            client = TokenBowlWebSocket(api_key="test-key", on_typing=on_typing)
 
             # Simulate connect and then typing indicator
             messages = [
                 json.dumps({"connect": {"client": "test-client-id"}}),
-                json.dumps({
-                    "push": {
-                        "channel": "room:main",
-                        "pub": {
-                            "data": {
-                                "type": "typing",
-                                "username": "bob",
-                                "to_username": None,
-                                "timestamp": "2024-01-01T00:00:00Z"
-                            }
+                json.dumps(
+                    {
+                        "push": {
+                            "channel": "room:main",
+                            "pub": {
+                                "data": {
+                                    "type": "typing",
+                                    "username": "bob",
+                                    "to_username": None,
+                                    "timestamp": "2024-01-01T00:00:00Z",
+                                }
+                            },
                         }
                     }
-                })
+                ),
             ]
             mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
 
@@ -483,27 +489,28 @@ async def test_handle_unread_count(mock_websocket, mock_httpx_response):
 
         with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
             client = TokenBowlWebSocket(
-                api_key="test-key",
-                on_unread_count=on_unread_count
+                api_key="test-key", on_unread_count=on_unread_count
             )
 
             # Simulate connect and then unread count update
             messages = [
                 json.dumps({"connect": {"client": "test-client-id"}}),
-                json.dumps({
-                    "push": {
-                        "channel": "user:testuser",
-                        "pub": {
-                            "data": {
-                                "type": "unread_count",
-                                "unread_room_messages": 5,
-                                "unread_direct_messages": 3,
-                                "total_unread": 8,
-                                "timestamp": "2024-01-01T00:00:00Z"
-                            }
+                json.dumps(
+                    {
+                        "push": {
+                            "channel": "user:testuser",
+                            "pub": {
+                                "data": {
+                                    "type": "unread_count",
+                                    "unread_room_messages": 5,
+                                    "unread_direct_messages": 3,
+                                    "total_unread": 8,
+                                    "timestamp": "2024-01-01T00:00:00Z",
+                                }
+                            },
                         }
                     }
-                })
+                ),
             ]
             mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
 
@@ -554,20 +561,12 @@ async def test_server_disconnect(mock_websocket, mock_httpx_response):
         mock_client_class.return_value = mock_client
 
         with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-            client = TokenBowlWebSocket(
-                api_key="test-key",
-                on_disconnect=on_disconnect
-            )
+            client = TokenBowlWebSocket(api_key="test-key", on_disconnect=on_disconnect)
 
             # Simulate connect and then disconnect
             messages = [
                 json.dumps({"connect": {"client": "test-client-id"}}),
-                json.dumps({
-                    "disconnect": {
-                        "reason": "shutdown",
-                        "reconnect": False
-                    }
-                })
+                json.dumps({"disconnect": {"reason": "shutdown", "reconnect": False}}),
             ]
             mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
 

@@ -28,6 +28,7 @@ class TokenBowlWebSocket:
         async def on_message(message: MessageResponse):
             print(f"{message.from_username}: {message.content}")
 
+
         async with TokenBowlWebSocket(
             api_key="your-api-key",
             on_message=on_message,
@@ -87,7 +88,9 @@ class TokenBowlWebSocket:
         self._subscriptions: set[str] = set()
 
         # Message tracking
-        self._message_ids: set[str] = set()  # Track received message IDs to prevent duplicates
+        self._message_ids: set[str] = (
+            set()
+        )  # Track received message IDs to prevent duplicates
         self._command_id = 1  # Command ID counter for Centrifugo protocol
 
         # Tasks
@@ -134,9 +137,7 @@ class TokenBowlWebSocket:
             # Send connection command with token
             connect_cmd = {
                 "id": self._get_next_command_id(),
-                "connect": {
-                    "token": self._connection_info["token"]
-                }
+                "connect": {"token": self._connection_info["token"]},
             }
             await self._websocket.send(json.dumps(connect_cmd))
 
@@ -168,10 +169,7 @@ class TokenBowlWebSocket:
             try:
                 await asyncio.sleep(25)  # Ping every 25 seconds
                 if self._websocket and self._connected:
-                    ping_cmd = {
-                        "id": self._get_next_command_id(),
-                        "ping": {}
-                    }
+                    ping_cmd = {"id": self._get_next_command_id(), "ping": {}}
                     await self._websocket.send(json.dumps(ping_cmd))
                     logger.debug("Sent ping to Centrifugo")
             except Exception as e:
@@ -257,7 +255,9 @@ class TokenBowlWebSocket:
             disconnect_data = data["disconnect"]
             reason = disconnect_data.get("reason", "unknown")
             reconnect = disconnect_data.get("reconnect", True)
-            logger.warning(f"Server requested disconnect: {reason}, reconnect: {reconnect}")
+            logger.warning(
+                f"Server requested disconnect: {reason}, reconnect: {reconnect}"
+            )
 
             self._connected = False
             self._connecting = False
@@ -295,7 +295,9 @@ class TokenBowlWebSocket:
                     read_by = data.get("read_by")
                     if message_id and read_by:
                         self.on_read_receipt(message_id, read_by)
-                        logger.debug(f"Received read receipt: {message_id} read by {read_by}")
+                        logger.debug(
+                            f"Received read receipt: {message_id} read by {read_by}"
+                        )
 
             elif event_type == "typing":
                 # Handle typing indicator event
@@ -304,7 +306,9 @@ class TokenBowlWebSocket:
                     to_username = data.get("to_username")
                     if username:
                         self.on_typing(username, to_username)
-                        logger.debug(f"Received typing indicator: {username} typing to {to_username or 'room'}")
+                        logger.debug(
+                            f"Received typing indicator: {username} typing to {to_username or 'room'}"
+                        )
 
             elif event_type == "unread_count":
                 # Handle unread count update
@@ -335,7 +339,9 @@ class TokenBowlWebSocket:
                 if self.on_message and "from_username" in data:
                     message = MessageResponse(**data)
                     self.on_message(message)
-                    logger.debug(f"Processed message from {message.from_username} on channel {channel}")
+                    logger.debug(
+                        f"Processed message from {message.from_username} on channel {channel}"
+                    )
 
         except Exception as e:
             logger.error(f"Error processing publication: {e}")
@@ -353,7 +359,7 @@ class TokenBowlWebSocket:
                     "subscribe": {
                         "channel": channel,
                         "recover": True,  # Enable message recovery
-                    }
+                    },
                 }
                 await self._websocket.send(json.dumps(subscribe_cmd))
                 logger.debug(f"Subscribing to channel: {channel}")
@@ -501,12 +507,16 @@ class TokenBowlWebSocket:
 
     async def mark_room_messages_read(self) -> None:
         """Mark all room messages as read (not supported in Centrifugo mode)."""
-        logger.debug("mark_room_messages_read not supported via WebSocket in Centrifugo mode")
+        logger.debug(
+            "mark_room_messages_read not supported via WebSocket in Centrifugo mode"
+        )
         # Could implement via REST API if needed
 
     async def mark_direct_messages_read(self, from_username: str) -> None:
         """Mark all direct messages from a user as read (not supported in Centrifugo mode)."""
-        logger.debug("mark_direct_messages_read not supported via WebSocket in Centrifugo mode")
+        logger.debug(
+            "mark_direct_messages_read not supported via WebSocket in Centrifugo mode"
+        )
         # Could implement via REST API if needed
 
     async def send_typing_indicator(self, to_username: str | None = None) -> None:
@@ -560,7 +570,9 @@ class TokenBowlWebSocket:
                     count = UnreadCountResponse(**data)
                     self.on_unread_count(count)
 
-                logger.debug(f"Fetched unread count: {data.get('total_unread', 0)} total")
+                logger.debug(
+                    f"Fetched unread count: {data.get('total_unread', 0)} total"
+                )
 
         except Exception as e:
             logger.error(f"Failed to get unread count: {e}")
