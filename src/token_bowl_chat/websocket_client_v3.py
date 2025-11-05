@@ -1,6 +1,7 @@
 """WebSocket client for real-time Token Bowl Chat messaging using Centrifugo."""
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -129,10 +130,8 @@ class TokenBowlWebSocket:
 
             # Connect to Centrifugo WebSocket
             ws_url = self._connection_info["url"]
-            self._websocket = await websockets.connect(
-                ws_url,
-                subprotocols=["centrifuge-json"],  # Use JSON protocol
-            )
+            self._websocket = await websockets.connect(ws_url)
+            # Note: Centrifugo uses standard WebSocket, no specific subprotocol needed
 
             # Send connection command with token
             connect_cmd = {
@@ -372,17 +371,13 @@ class TokenBowlWebSocket:
         # Cancel tasks
         if self._receive_task:
             self._receive_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._receive_task
-            except asyncio.CancelledError:
-                pass
 
         if self._ping_task:
             self._ping_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._ping_task
-            except asyncio.CancelledError:
-                pass
 
         # Close WebSocket
         if self._websocket:
@@ -466,7 +461,8 @@ class TokenBowlWebSocket:
                     timeout=10.0,
                 )
                 response.raise_for_status()
-                return response.json()
+                result = response.json()
+                return {"count": result.get("marked_as_read", 0)} if isinstance(result, dict) else {"count": 0}
 
         except Exception as e:
             logger.error(f"Failed to mark all messages as read: {e}")
@@ -514,6 +510,7 @@ class TokenBowlWebSocket:
 
     async def mark_direct_messages_read(self, from_username: str) -> None:
         """Mark all direct messages from a user as read (not supported in Centrifugo mode)."""
+        _ = from_username  # Unused but kept for compatibility
         logger.debug(
             "mark_direct_messages_read not supported via WebSocket in Centrifugo mode"
         )

@@ -49,7 +49,11 @@ async def test_connect_success(mock_websocket, mock_httpx_response):
 
             # Mock the receive loop to simulate connect response
             connect_response = json.dumps({"connect": {"client": "test-client-id"}})
-            mock_websocket.__aiter__ = MagicMock(return_value=iter([connect_response]))
+
+            async def async_iter():
+                yield connect_response
+
+            mock_websocket.__aiter__ = MagicMock(return_value=async_iter())
 
             await client.connect()
 

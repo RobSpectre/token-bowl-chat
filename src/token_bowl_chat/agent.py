@@ -25,7 +25,7 @@ from rich.console import Console
 
 from token_bowl_chat.async_client import AsyncTokenBowlClient
 from token_bowl_chat.models import MessageResponse
-from token_bowl_chat.websocket_client import TokenBowlWebSocket
+from token_bowl_chat.websocket_client_v3 import TokenBowlWebSocket
 
 # MCP imports (optional)
 try:
