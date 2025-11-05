@@ -462,7 +462,11 @@ class TokenBowlWebSocket:
                 )
                 response.raise_for_status()
                 result = response.json()
-                return {"count": result.get("marked_as_read", 0)} if isinstance(result, dict) else {"count": 0}
+                return (
+                    {"count": result.get("marked_as_read", 0)}
+                    if isinstance(result, dict)
+                    else {"count": 0}
+                )
 
         except Exception as e:
             logger.error(f"Failed to mark all messages as read: {e}")

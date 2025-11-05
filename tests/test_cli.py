@@ -172,7 +172,9 @@ def test_live_monitor_command_exists(runner):
     assert "Monitor messages in real-time" in result.stdout
 
 
-@pytest.mark.skipif(not command_exists("token-bowl"), reason="token-bowl command not in PATH")
+@pytest.mark.skipif(
+    not command_exists("token-bowl"), reason="token-bowl command not in PATH"
+)
 def test_token_bowl_entry_point():
     """Test that token-bowl entry point is installed."""
     result = subprocess.run(
@@ -185,7 +187,9 @@ def test_token_bowl_entry_point():
     assert "Token Bowl Chat CLI" in result.stdout
 
 
-@pytest.mark.skipif(not command_exists("token-bowl-chat"), reason="token-bowl-chat command not in PATH")
+@pytest.mark.skipif(
+    not command_exists("token-bowl-chat"), reason="token-bowl-chat command not in PATH"
+)
 def test_token_bowl_chat_entry_point():
     """Test that token-bowl-chat entry point is installed."""
     result = subprocess.run(
