@@ -164,14 +164,21 @@ class TokenBowlWebSocket:
         return cmd_id
 
     async def _ping_loop(self) -> None:
-        """Send periodic pings to keep connection alive."""
+        """Send periodic pings to keep connection alive.
+
+        Note: Centrifugo server also sends pings to us (default every 25s).
+        We respond to those with pongs. This client-side ping is additional
+        and helps detect connection issues from our side.
+        """
         while self._connected:
             try:
-                await asyncio.sleep(25)  # Ping every 25 seconds
+                # Send client ping every 20 seconds (before server's 25s interval)
+                # This helps us detect connection issues faster
+                await asyncio.sleep(20)
                 if self._websocket and self._connected:
                     ping_cmd = {"id": self._get_next_command_id(), "ping": {}}
                     await self._websocket.send(json.dumps(ping_cmd))
-                    logger.debug("Sent ping to Centrifugo")
+                    logger.debug("Sent client ping to Centrifugo")
             except Exception as e:
                 logger.error(f"Error sending ping: {e}")
                 break
@@ -213,8 +220,28 @@ class TokenBowlWebSocket:
     async def _handle_centrifugo_message(self, data: dict[str, Any]) -> None:
         """Handle Centrifugo protocol messages."""
 
+        # Handle push messages first (they may contain ping)
+        if "push" in data:
+            push_data = data["push"]
+
+            # Check if it's a ping push
+            if "ping" in push_data:
+                # Server is pinging us, respond immediately
+                pong_response = {"pong": {}}
+                if self._websocket:
+                    await self._websocket.send(json.dumps(pong_response))
+                    logger.debug("Received ping push, sent pong")
+                return
+
+            # Check if it's a publication
+            if "pub" in push_data:
+                pub = push_data["pub"]
+                channel = push_data.get("channel", "")
+                await self._handle_publication(pub, channel)
+                return
+
         # Handle connect response
-        if "connect" in data:
+        elif "connect" in data:
             result = data["connect"]
             self._client_id = result.get("client")
             self._connected = True
@@ -238,12 +265,6 @@ class TokenBowlWebSocket:
                 if "publications" in data["subscribe"]:
                     for pub in data["subscribe"]["publications"]:
                         await self._handle_publication(pub, channel)
-
-        # Handle publication (incoming message)
-        elif "push" in data and "pub" in data["push"]:
-            pub = data["push"]["pub"]
-            channel = data["push"].get("channel", "")
-            await self._handle_publication(pub, channel)
 
         # Handle unsubscribe
         elif "unsubscribe" in data:
@@ -289,9 +310,17 @@ class TokenBowlWebSocket:
                 if self.on_error:
                     self.on_error(Exception(f"Centrifugo error {code}: {message}"))
 
-        # Handle ping response (pong)
+        # Handle incoming ping from server - must respond with pong
+        elif "ping" in data:
+            # Server is pinging us, we must respond with pong immediately
+            pong_response = {"pong": {}}
+            if self._websocket:
+                await self._websocket.send(json.dumps(pong_response))
+                logger.debug("Received ping from Centrifugo, sent pong")
+
+        # Handle ping response (pong) - response to our ping
         elif "pong" in data:
-            logger.debug("Received pong from Centrifugo")
+            logger.debug("Received pong from Centrifugo (response to our ping)")
 
     async def _handle_publication(self, pub: dict[str, Any], channel: str) -> None:
         """Handle a publication (message or event) from Centrifugo."""
