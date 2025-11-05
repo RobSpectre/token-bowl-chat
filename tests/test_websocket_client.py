@@ -376,6 +376,170 @@ async def test_wait_until_connected(mock_websocket, mock_httpx_response):
 
 
 @pytest.mark.asyncio
+async def test_handle_read_receipt(mock_websocket, mock_httpx_response):
+    """Test handling read receipt events from Centrifugo."""
+    receipts_received = []
+
+    def on_read_receipt(message_id: str, read_by: str):
+        receipts_received.append((message_id, read_by))
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(
+                api_key="test-key",
+                on_read_receipt=on_read_receipt
+            )
+
+            # Simulate connect and then read receipt
+            messages = [
+                json.dumps({"connect": {"client": "test-client-id"}}),
+                json.dumps({
+                    "push": {
+                        "channel": "room:main",
+                        "pub": {
+                            "data": {
+                                "type": "read_receipt",
+                                "message_id": "msg-123",
+                                "read_by": "alice",
+                                "read_at": "2024-01-01T00:00:00Z"
+                            }
+                        }
+                    }
+                })
+            ]
+            mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
+
+            await client.connect()
+            await asyncio.sleep(0.1)
+
+            assert len(receipts_received) == 1
+            assert receipts_received[0] == ("msg-123", "alice")
+
+
+@pytest.mark.asyncio
+async def test_handle_typing_indicator(mock_websocket, mock_httpx_response):
+    """Test handling typing indicator events from Centrifugo."""
+    typing_events = []
+
+    def on_typing(username: str, to_username: str | None):
+        typing_events.append((username, to_username))
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(
+                api_key="test-key",
+                on_typing=on_typing
+            )
+
+            # Simulate connect and then typing indicator
+            messages = [
+                json.dumps({"connect": {"client": "test-client-id"}}),
+                json.dumps({
+                    "push": {
+                        "channel": "room:main",
+                        "pub": {
+                            "data": {
+                                "type": "typing",
+                                "username": "bob",
+                                "to_username": None,
+                                "timestamp": "2024-01-01T00:00:00Z"
+                            }
+                        }
+                    }
+                })
+            ]
+            mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
+
+            await client.connect()
+            await asyncio.sleep(0.1)
+
+            assert len(typing_events) == 1
+            assert typing_events[0] == ("bob", None)
+
+
+@pytest.mark.asyncio
+async def test_handle_unread_count(mock_websocket, mock_httpx_response):
+    """Test handling unread count updates from Centrifugo."""
+    unread_counts = []
+
+    def on_unread_count(count):
+        unread_counts.append(count)
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(
+                api_key="test-key",
+                on_unread_count=on_unread_count
+            )
+
+            # Simulate connect and then unread count update
+            messages = [
+                json.dumps({"connect": {"client": "test-client-id"}}),
+                json.dumps({
+                    "push": {
+                        "channel": "user:testuser",
+                        "pub": {
+                            "data": {
+                                "type": "unread_count",
+                                "unread_room_messages": 5,
+                                "unread_direct_messages": 3,
+                                "total_unread": 8,
+                                "timestamp": "2024-01-01T00:00:00Z"
+                            }
+                        }
+                    }
+                })
+            ]
+            mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
+
+            await client.connect()
+            await asyncio.sleep(0.1)
+
+            assert len(unread_counts) == 1
+            assert unread_counts[0].unread_room_messages == 5
+            assert unread_counts[0].unread_direct_messages == 3
+            assert unread_counts[0].total_unread == 8
+
+
+@pytest.mark.asyncio
+async def test_send_typing_indicator_via_rest():
+    """Test sending typing indicator via REST API."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+
+        # Mock response for typing indicator
+        typing_response = MagicMock()
+        typing_response.raise_for_status = MagicMock()
+        mock_client.post.return_value = typing_response
+
+        mock_client_class.return_value = mock_client
+
+        client = TokenBowlWebSocket(api_key="test-key")
+        await client.send_typing_indicator()
+
+        # Verify REST API call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[0][0].endswith("/typing")
+
+
+@pytest.mark.asyncio
 async def test_server_disconnect(mock_websocket, mock_httpx_response):
     """Test handling server-initiated disconnect."""
     disconnect_called = []

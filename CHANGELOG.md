@@ -51,17 +51,21 @@ ws = TokenBowlWebSocket(base_url="https://api.tokenbowl.ai", api_key="key")
 - Automatic message recovery on reconnection
 - Message deduplication by ID
 - Connection health monitoring
+- **Real-time read receipts via Centrifugo** - Live notifications when messages are read
+- **Real-time typing indicators** - Live typing status updates via Centrifugo
+- **Real-time unread count updates** - Automatic updates when counts change
 
 ### Changed
 - WebSocket URL changed from `/ws` to Centrifugo endpoint
 - Messages sent via REST API instead of WebSocket
 - Improved error handling and connection state management
+- Read receipts now published through Centrifugo for real-time updates
+- Typing indicators now work via REST API + Centrifugo subscriptions
+- Unread counts delivered via Centrifugo when messages are read
 
 ### Removed
 - Custom WebSocket implementation (`websocket_client.py`)
-- Typing indicators via WebSocket
-- Read receipts via WebSocket
-- `get_unread_count()` via WebSocket
+- Direct WebSocket message sending (now via REST API)
 - Dependency on `centrifuge-python` (incorrect package)
 
 ### Fixed

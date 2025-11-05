@@ -279,29 +279,63 @@ class TokenBowlWebSocket:
             logger.debug("Received pong from Centrifugo")
 
     async def _handle_publication(self, pub: dict[str, Any], channel: str) -> None:
-        """Handle a publication (message) from Centrifugo."""
-        message_data = pub.get("data")
-        if not message_data:
+        """Handle a publication (message or event) from Centrifugo."""
+        data = pub.get("data")
+        if not data:
             return
 
         try:
-            # Check for duplicate messages
-            message_id = message_data.get("id")
-            if message_id and message_id in self._message_ids:
-                logger.debug(f"Ignoring duplicate message: {message_id}")
-                return
+            # Check the type of event
+            event_type = data.get("type")
 
-            if message_id:
-                self._message_ids.add(message_id)
-                # Keep only last 1000 message IDs to prevent memory growth
-                if len(self._message_ids) > 1000:
-                    self._message_ids = set(list(self._message_ids)[-1000:])
+            if event_type == "read_receipt":
+                # Handle read receipt event
+                if self.on_read_receipt:
+                    message_id = data.get("message_id")
+                    read_by = data.get("read_by")
+                    if message_id and read_by:
+                        self.on_read_receipt(message_id, read_by)
+                        logger.debug(f"Received read receipt: {message_id} read by {read_by}")
 
-            # Convert to MessageResponse and call handler
-            if self.on_message:
-                message = MessageResponse(**message_data)
-                self.on_message(message)
-                logger.debug(f"Processed message from {message.from_username} on channel {channel}")
+            elif event_type == "typing":
+                # Handle typing indicator event
+                if self.on_typing:
+                    username = data.get("username")
+                    to_username = data.get("to_username")
+                    if username:
+                        self.on_typing(username, to_username)
+                        logger.debug(f"Received typing indicator: {username} typing to {to_username or 'room'}")
+
+            elif event_type == "unread_count":
+                # Handle unread count update
+                if self.on_unread_count:
+                    count = UnreadCountResponse(
+                        unread_room_messages=data.get("unread_room_messages", 0),
+                        unread_direct_messages=data.get("unread_direct_messages", 0),
+                        total_unread=data.get("total_unread", 0),
+                    )
+                    self.on_unread_count(count)
+                    logger.debug(f"Received unread count: {count.total_unread} total")
+
+            else:
+                # Regular message (no type field or unknown type)
+                # Check for duplicate messages
+                message_id = data.get("id")
+                if message_id and message_id in self._message_ids:
+                    logger.debug(f"Ignoring duplicate message: {message_id}")
+                    return
+
+                if message_id:
+                    self._message_ids.add(message_id)
+                    # Keep only last 1000 message IDs to prevent memory growth
+                    if len(self._message_ids) > 1000:
+                        self._message_ids = set(list(self._message_ids)[-1000:])
+
+                # Convert to MessageResponse and call handler
+                if self.on_message and "from_username" in data:
+                    message = MessageResponse(**data)
+                    self.on_message(message)
+                    logger.debug(f"Processed message from {message.from_username} on channel {channel}")
 
         except Exception as e:
             logger.error(f"Error processing publication: {e}")
@@ -476,12 +510,57 @@ class TokenBowlWebSocket:
         # Could implement via REST API if needed
 
     async def send_typing_indicator(self, to_username: str | None = None) -> None:
-        """Send typing indicator (not supported in Centrifugo mode)."""
-        logger.debug("Typing indicators not supported in Centrifugo mode")
+        """Send typing indicator via REST API.
+
+        Args:
+            to_username: Optional recipient for DM typing indicator
+        """
+        if not self.api_key:
+            raise AuthenticationError("API key is required")
+
+        try:
+            async with httpx.AsyncClient() as client:
+                params = {"to_username": to_username} if to_username else {}
+                response = await client.post(
+                    f"{self.base_url}/typing",
+                    params=params,
+                    headers={"X-API-Key": self.api_key},
+                    timeout=10.0,
+                )
+                response.raise_for_status()
+                logger.debug(f"Sent typing indicator to {to_username or 'room'}")
+
+        except Exception as e:
+            logger.error(f"Failed to send typing indicator: {e}")
 
     async def get_unread_count(self) -> None:
-        """Request unread count update (not supported via WebSocket in Centrifugo mode)."""
-        logger.debug("Unread count via WebSocket not supported in Centrifugo mode")
+        """Request unread count update via REST API.
+
+        The result will be delivered via the on_unread_count callback if the server
+        publishes it to Centrifugo. Otherwise, you can use the REST API directly.
+        """
+        if not self.api_key:
+            raise AuthenticationError("API key is required")
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/unread",
+                    headers={"X-API-Key": self.api_key},
+                    timeout=10.0,
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                # Call the callback directly with the REST response
+                if self.on_unread_count:
+                    count = UnreadCountResponse(**data)
+                    self.on_unread_count(count)
+
+                logger.debug(f"Fetched unread count: {data.get('total_unread', 0)} total")
+
+        except Exception as e:
+            logger.error(f"Failed to get unread count: {e}")
 
     @property
     def is_connected(self) -> bool:

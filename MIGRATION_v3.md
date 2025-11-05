@@ -29,18 +29,19 @@ client = TokenBowlWebSocket(
 # Client automatically fetches JWT token and connects to Centrifugo
 ```
 
-### 2. Removed Features
+### 2. Enhanced Features
 
-The following features are no longer supported via WebSocket in the Centrifugo implementation:
+The following features now work through Centrifugo with improved real-time capabilities:
 
-| Feature | Status | Alternative |
+| Feature | Status | Implementation |
 |---------|--------|-------------|
-| `send_typing_indicator()` | Removed | Not supported in Centrifugo mode |
-| `get_unread_count()` via WebSocket | Removed | Use REST API endpoints |
+| `send_typing_indicator()` | ✅ Enhanced | Sends via REST API, received in real-time via Centrifugo |
+| `get_unread_count()` | ✅ Enhanced | Fetches via REST API, updates received in real-time |
+| Read receipts | ✅ Enhanced | Published to Centrifugo when messages are marked as read |
+| Typing indicators | ✅ Enhanced | Real-time typing status via Centrifugo channels |
+| Unread count updates | ✅ Enhanced | Automatic updates when messages are read |
 | `mark_room_messages_read()` | Limited | Use `mark_all_as_read()` or REST API |
 | `mark_direct_messages_read()` | Limited | Use REST API for filtered marking |
-| Read receipts via WebSocket | Removed | Read receipts handled via REST API |
-| Typing indicators | Removed | Not implemented in Centrifugo version |
 
 ### 3. Message Sending
 

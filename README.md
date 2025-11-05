@@ -393,11 +393,14 @@ asyncio.run(main())
 
 **WebSocket Features:**
 - 📨 Real-time message receiving via Centrifugo channels (room:main, user:username)
-- 📤 Message sending via REST API (Centrifugo client-side publishing disabled)
+- ✓✓ **Read receipts** - Real-time notification when messages are read
+- 💬 **Typing indicators** - Show and receive typing status in real-time
+- 📬 **Unread count updates** - Live updates when unread counts change
+- 📤 Message sending via REST API with optimistic UI updates
 - 🔄 Automatic reconnection with exponential backoff
 - 🆔 JWT authentication with automatic token management
 - 📊 Message deduplication by ID
-- 🔔 Event callbacks for connection state changes
+- 🔔 Event callbacks for all real-time events
 
 See the [WebSocket Guide](docs/websocket.md) and [WebSocket Features Guide](docs/websocket-features.md) for complete documentation.
 
