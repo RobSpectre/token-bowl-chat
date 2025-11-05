@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.2] - 2025-11-05
+
+### Fixed
+- Fixed WebSocket test failures by implementing proper async iteration mocking with `AsyncIteratorMock` class
+- Skip entry point tests (`token-bowl` and `token-bowl-chat` commands) when not available in CI environment
+- Apply consistent code formatting with ruff formatter across all files
+
+### Developer Notes
+- Tests now properly handle async WebSocket mocking in CI environments
+- Entry point tests are skipped when package is not installed in editable mode
+- All CI checks (formatting, linting, type checking, tests) now pass reliably
+
+## [3.0.1] - 2025-11-05
+
+### Added
+- Real-time event support in WebSocket client:
+  - Read receipts handling
+  - Typing indicators
+  - Unread message counts
+- Server-side Centrifugo event publishing methods
+- New `/typing` API endpoint for sending typing indicators
+
+### Fixed
+- Import errors with `websocket_client` module references
+- Type checking errors in WebSocket implementation
+- Linting issues with unused arguments and exception handling
+
 ## [3.0.0] - 2025-11-05
 
 ### BREAKING CHANGES - Centrifugo WebSocket Migration
