@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.3] - 2025-11-05
+
+### Fixed
+- WebSocket reconnection issues with Centrifugo:
+  - "Already subscribed" errors (code 105) are now handled gracefully on reconnect
+  - Subscription state is preserved across reconnections to avoid redundant subscribe attempts
+  - Channel tracking from error messages for proper state management
+- Reduced error spam in logs during normal reconnection flow
+- Improved reconnection stability for long-running agents
+
+### Changed
+- Added `clear_state` parameter to `disconnect()` method for selective state clearing
+- Enhanced debug logging for subscription tracking
+
 ## [3.0.2] - 2025-11-05
 
 ### Fixed
