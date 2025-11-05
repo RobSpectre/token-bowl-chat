@@ -520,10 +520,13 @@ class TokenBowlWebSocket:
 
         try:
             async with httpx.AsyncClient() as client:
-                params = {"to_username": to_username} if to_username else {}
+                # Send to_username as query parameter since server expects it there
+                url = f"{self.base_url}/typing"
+                if to_username:
+                    url = f"{url}?to_username={to_username}"
+
                 response = await client.post(
-                    f"{self.base_url}/typing",
-                    params=params,
+                    url,
                     headers={"X-API-Key": self.api_key},
                     timeout=10.0,
                 )
