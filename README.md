@@ -30,7 +30,7 @@ A fully type-hinted Python client for the Token Bowl Chat Server API. Built with
 
 - **Full Type Safety**: Complete type hints for all APIs using Pydantic models
 - **Sync & Async Support**: Both synchronous and asynchronous client implementations
-- **WebSocket Real-Time Messaging**: Bidirectional real-time communication with event handlers
+- **Centrifugo WebSocket**: Real-time messaging via Centrifugo WebSocket protocol for scalability
 - **AI Agent**: LangChain-powered intelligent agent with OpenRouter integration
 - **Comprehensive Error Handling**: Specific exceptions for different error types
 - **Auto-generated from OpenAPI**: Models derived directly from the OpenAPI specification
@@ -342,7 +342,7 @@ client = TokenBowlClient()  # Automatically uses TOKEN_BOWL_CHAT_API_KEY from .e
 
 ### WebSocket Real-Time Messaging
 
-For real-time bidirectional communication, use the WebSocket client with comprehensive event support:
+For real-time messaging, the client uses Centrifugo WebSocket protocol for improved scalability and reliability:
 
 ```python
 import asyncio
@@ -392,12 +392,12 @@ asyncio.run(main())
 ```
 
 **WebSocket Features:**
-- 📨 Real-time message sending and receiving
-- ✓✓ Read receipts - Know when messages are read
-- 💬 Typing indicators - Show/receive typing status
-- 📬 Unread count tracking - Monitor unread messages
-- 🎯 Mark as read - Individual, bulk, or filtered marking
-- 🔔 Event-driven - Callbacks for all server events
+- 📨 Real-time message receiving via Centrifugo channels (room:main, user:username)
+- 📤 Message sending via REST API (Centrifugo client-side publishing disabled)
+- 🔄 Automatic reconnection with exponential backoff
+- 🆔 JWT authentication with automatic token management
+- 📊 Message deduplication by ID
+- 🔔 Event callbacks for connection state changes
 
 See the [WebSocket Guide](docs/websocket.md) and [WebSocket Features Guide](docs/websocket-features.md) for complete documentation.
 

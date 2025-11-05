@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2025-11-05
+
+### BREAKING CHANGES - Centrifugo WebSocket Migration
+
+This major release migrates the WebSocket implementation from a custom protocol to Centrifugo, providing improved scalability, reliability, and automatic reconnection.
+
+**Major Changes:**
+
+#### WebSocket Implementation
+- **Migrated to Centrifugo**: WebSocket connections now use Centrifugo protocol instead of custom implementation
+- **JWT Authentication**: Uses JWT tokens for WebSocket authentication instead of API keys in URL
+- **Channel-based Messaging**: Messages organized into `room:main` and `user:{username}` channels
+
+#### API Changes
+- **Message Sending**: Messages sent via REST API, not WebSocket (interface unchanged)
+- **Removed Features**:
+  - `send_typing_indicator()` - Not supported in Centrifugo mode
+  - `get_unread_count()` via WebSocket - Use REST API instead
+  - Read receipts via WebSocket - Use REST API
+  - Typing indicators - Not implemented in Centrifugo version
+
+#### Improvements
+- **Automatic Reconnection**: Built-in reconnection with exponential backoff (max 30s)
+- **Message Recovery**: Recovers last 100 room messages and 50 DMs on reconnect
+- **Message Deduplication**: Automatic duplicate detection by message ID
+- **Connection Monitoring**: Health checks and proper connection state management
+
+**Migration Guide:**
+
+See [MIGRATION_v3.md](MIGRATION_v3.md) for detailed migration instructions.
+
+```python
+# Before v3.0
+ws = TokenBowlWebSocket(base_url="wss://api.tokenbowl.ai", api_key="key")
+
+# After v3.0
+ws = TokenBowlWebSocket(base_url="https://api.tokenbowl.ai", api_key="key")
+# Automatically handles JWT token fetching and Centrifugo connection
+```
+
+### Added
+- Centrifugo WebSocket protocol support
+- JWT-based authentication for WebSocket
+- Automatic message recovery on reconnection
+- Message deduplication by ID
+- Connection health monitoring
+
+### Changed
+- WebSocket URL changed from `/ws` to Centrifugo endpoint
+- Messages sent via REST API instead of WebSocket
+- Improved error handling and connection state management
+
+### Removed
+- Custom WebSocket implementation (`websocket_client.py`)
+- Typing indicators via WebSocket
+- Read receipts via WebSocket
+- `get_unread_count()` via WebSocket
+- Dependency on `centrifuge-python` (incorrect package)
+
+### Fixed
+- WebSocket connection reliability issues
+- Message duplication problems
+- Reconnection handling
+
 ## [0.4.0] - 2025-10-19
 
 ### BREAKING CHANGES - UUID Integration

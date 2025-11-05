@@ -1,4 +1,4 @@
-"""Tests for WebSocket client."""
+"""Tests for Centrifugo WebSocket client."""
 
 import asyncio
 import json
@@ -21,585 +21,394 @@ def mock_websocket():
     return ws
 
 
+@pytest.fixture
+def mock_httpx_response():
+    """Create a mock httpx response for connection token."""
+    response = MagicMock()
+    response.json.return_value = {
+        "url": "ws://localhost:8001/connection/websocket",
+        "token": "test-jwt-token",
+        "channels": ["room:main", "user:testuser"],
+        "user": "testuser"
+    }
+    response.raise_for_status = MagicMock()
+    return response
+
+
 @pytest.mark.asyncio
-async def test_connect_success(mock_websocket):
-    """Test successful WebSocket connection."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
+async def test_connect_success(mock_websocket, mock_httpx_response):
+    """Test successful WebSocket connection to Centrifugo."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(api_key="test-key")
+
+            # Mock the receive loop to simulate connect response
+            connect_response = json.dumps({
+                "connect": {
+                    "client": "test-client-id"
+                }
+            })
+            mock_websocket.__aiter__ = MagicMock(return_value=iter([connect_response]))
+
+            await client.connect()
+
+            # Give time for async tasks to process
+            await asyncio.sleep(0.1)
+
+            assert client.connected
+            assert client._websocket == mock_websocket
+
+            # Verify connection command was sent
+            mock_websocket.send.assert_called()
+            sent_data = json.loads(mock_websocket.send.call_args[0][0])
+            assert "connect" in sent_data
+            assert sent_data["connect"]["token"] == "test-jwt-token"
+
+
+@pytest.mark.asyncio
+async def test_connect_no_api_key():
+    """Test WebSocket connection without API key."""
+    client = TokenBowlWebSocket()
+    with pytest.raises(AuthenticationError, match="API key is required"):
         await client.connect()
 
-        assert client.is_connected
-        assert client._websocket == mock_websocket
-
 
 @pytest.mark.asyncio
-async def test_connect_authentication_error():
-    """Test WebSocket connection with invalid API key."""
-    mock_error = Exception("401 Unauthorized")
-    mock_error.response = MagicMock(status_code=401)
+async def test_connect_token_endpoint_error():
+    """Test WebSocket connection when token endpoint fails."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.side_effect = Exception("Connection failed")
+        mock_client_class.return_value = mock_client
 
-    with patch(
-        "websockets.connect",
-        side_effect=lambda *args, **kwargs: (_ for _ in ()).throw(
-            type(
-                "InvalidStatus",
-                (Exception,),
-                {"response": MagicMock(status_code=401)},
-            )()
-        ),
-    ):
-        client = TokenBowlWebSocket(api_key="invalid-key")
-
-        # Import the exception type we need to catch
-        from websockets.exceptions import InvalidStatus
-
-        with (
-            patch(
-                "websockets.connect",
-                side_effect=InvalidStatus(MagicMock(status_code=401)),
-            ),
-            pytest.raises(AuthenticationError, match="Invalid API key"),
-        ):
+        client = TokenBowlWebSocket(api_key="test-key")
+        with pytest.raises(NetworkError, match="Failed to connect to Centrifugo"):
             await client.connect()
 
 
 @pytest.mark.asyncio
-async def test_connect_with_callbacks(mock_websocket):
-    """Test connection with on_connect callback."""
-    on_connect_called = False
+async def test_send_message_via_rest(mock_httpx_response):
+    """Test sending message via REST API."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
 
-    def on_connect():
-        nonlocal on_connect_called
-        on_connect_called = True
+        # Mock response for send message
+        send_response = MagicMock()
+        send_response.raise_for_status = MagicMock()
+        mock_client.post.return_value = send_response
 
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key", on_connect=on_connect)
-        await client.connect()
+        mock_client_class.return_value = mock_client
 
-        assert on_connect_called
-
-
-@pytest.mark.asyncio
-async def test_send_message_room(mock_websocket):
-    """Test sending a room message."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
         client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
         await client.send_message("Hello, world!")
 
-        mock_websocket.send.assert_called_once()
-        sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["content"] == "Hello, world!"
-        assert "to_username" not in sent_data
+        # Verify REST API call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[0][0].endswith("/messages")
+        assert call_args[1]["json"]["content"] == "Hello, world!"
+        assert "X-API-Key" in call_args[1]["headers"]
 
 
 @pytest.mark.asyncio
-async def test_send_message_direct(mock_websocket):
-    """Test sending a direct message."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+async def test_send_direct_message_via_rest(mock_httpx_response):
+    """Test sending direct message via REST API."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+
+        # Mock response for send message
+        send_response = MagicMock()
+        send_response.raise_for_status = MagicMock()
+        mock_client.post.return_value = send_response
+
+        mock_client_class.return_value = mock_client
+
         client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
+        await client.send_message("Hello!", to_username="alice")
 
-        await client.send_message("Hi Bob!", to_username="bob")
-
-        mock_websocket.send.assert_called_once()
-        sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["content"] == "Hi Bob!"
-        assert sent_data["to_username"] == "bob"
-
-
-@pytest.mark.asyncio
-async def test_send_message_not_connected():
-    """Test sending message when not connected."""
-    client = TokenBowlWebSocket(api_key="test-key")
-
-    with pytest.raises(ValueError, match="not connected"):
-        await client.send_message("test")
+        # Verify REST API call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[1]["json"]["content"] == "Hello!"
+        assert call_args[1]["json"]["to_username"] == "alice"
 
 
 @pytest.mark.asyncio
-async def test_send_message_invalid_content(mock_websocket):
-    """Test sending message with invalid content."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        # Empty content
-        with pytest.raises(ValueError, match="1-10000 characters"):
-            await client.send_message("")
-
-        # Too long content
-        with pytest.raises(ValueError, match="1-10000 characters"):
-            await client.send_message("x" * 10001)
-
-
-@pytest.mark.asyncio
-async def test_receive_message():
-    """Test receiving a message."""
-    message_data = {
-        "id": "msg123",
-        "from_user_id": "550e8400-e29b-41d4-a716-446655440000",
-        "from_username": "alice",
-        "to_username": None,
-        "content": "Hello!",
-        "message_type": "room",
-        "description": "test message",
-        "timestamp": "2024-01-01T00:00:00Z",
-    }
-
+async def test_handle_incoming_message(mock_websocket, mock_httpx_response):
+    """Test handling incoming message from Centrifugo."""
     messages_received = []
 
     def on_message(msg: MessageResponse):
         messages_received.append(msg)
 
-    # Create mock websocket that yields one message
-    mock_ws = AsyncMock()
-    mock_ws.send = AsyncMock()
-    mock_ws.close = AsyncMock()
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
 
-    # Make the websocket async iterator yield our message
-    async def message_generator():
-        yield json.dumps(message_data)
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(api_key="test-key", on_message=on_message)
 
-    mock_ws.__aiter__ = lambda self: message_generator()
+            # Simulate connect and then message
+            messages = [
+                json.dumps({"connect": {"client": "test-client-id"}}),
+                json.dumps({
+                    "push": {
+                        "channel": "room:main",
+                        "pub": {
+                            "data": {
+                                "id": "msg-123",
+                                "content": "Test message",
+                                "from_username": "alice",
+                                "from_user_id": "user-123",
+                                "timestamp": "2024-01-01T00:00:00Z",
+                                "message_type": "room"
+                            }
+                        }
+                    }
+                })
+            ]
+            mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
 
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_ws)):
-        client = TokenBowlWebSocket(api_key="test-key", on_message=on_message)
-        await client.connect()
+            await client.connect()
+            await asyncio.sleep(0.1)
 
-        # Wait a bit for message to be received
-        await asyncio.sleep(0.1)
-
-        assert len(messages_received) == 1
-        assert (
-            messages_received[0].from_user_id == "550e8400-e29b-41d4-a716-446655440000"
-        )
-        assert messages_received[0].from_username == "alice"
-        assert messages_received[0].content == "Hello!"
-
-        await client.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_receive_error_message():
-    """Test receiving an error message from server."""
-    error_data = {"type": "error", "error": "Something went wrong"}
-
-    errors_received = []
-
-    def on_error(error: Exception):
-        errors_received.append(error)
-
-    # Create mock websocket that yields an error
-    mock_ws = AsyncMock()
-    mock_ws.send = AsyncMock()
-    mock_ws.close = AsyncMock()
-
-    async def message_generator():
-        yield json.dumps(error_data)
-
-    mock_ws.__aiter__ = lambda self: message_generator()
-
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_ws)):
-        client = TokenBowlWebSocket(api_key="test-key", on_error=on_error)
-        await client.connect()
-
-        # Wait for error to be processed
-        await asyncio.sleep(0.1)
-
-        assert len(errors_received) == 1
-        assert "Something went wrong" in str(errors_received[0])
-
-        await client.disconnect()
+            assert len(messages_received) == 1
+            assert messages_received[0].content == "Test message"
+            assert messages_received[0].from_username == "alice"
 
 
 @pytest.mark.asyncio
-async def test_disconnect(mock_websocket):
-    """Test disconnecting from WebSocket."""
-    on_disconnect_called = False
+async def test_duplicate_message_ignored(mock_websocket, mock_httpx_response):
+    """Test that duplicate messages are ignored."""
+    messages_received = []
+
+    def on_message(msg: MessageResponse):
+        messages_received.append(msg)
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(api_key="test-key", on_message=on_message)
+
+            # Send the same message twice
+            messages = [
+                json.dumps({"connect": {"client": "test-client-id"}}),
+                json.dumps({
+                    "push": {
+                        "channel": "room:main",
+                        "pub": {
+                            "data": {
+                                "id": "msg-123",
+                                "content": "Test message",
+                                "from_username": "alice",
+                                "from_user_id": "user-123",
+                                "timestamp": "2024-01-01T00:00:00Z",
+                                "message_type": "room"
+                            }
+                        }
+                    }
+                }),
+                json.dumps({
+                    "push": {
+                        "channel": "room:main",
+                        "pub": {
+                            "data": {
+                                "id": "msg-123",  # Same ID
+                                "content": "Test message",
+                                "from_username": "alice",
+                                "from_user_id": "user-123",
+                                "timestamp": "2024-01-01T00:00:00Z",
+                                "message_type": "room"
+                            }
+                        }
+                    }
+                })
+            ]
+            mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
+
+            await client.connect()
+            await asyncio.sleep(0.1)
+
+            # Only one message should be received (duplicate ignored)
+            assert len(messages_received) == 1
+
+
+@pytest.mark.asyncio
+async def test_disconnect(mock_websocket, mock_httpx_response):
+    """Test disconnecting from Centrifugo."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(api_key="test-key")
+
+            # Connect
+            mock_websocket.__aiter__ = MagicMock(return_value=iter([
+                json.dumps({"connect": {"client": "test-client-id"}})
+            ]))
+            await client.connect()
+            await asyncio.sleep(0.1)
+
+            assert client.connected
+
+            # Disconnect
+            await client.disconnect()
+
+            assert not client.connected
+            mock_websocket.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_context_manager(mock_websocket, mock_httpx_response):
+    """Test using WebSocket client as context manager."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            mock_websocket.__aiter__ = MagicMock(return_value=iter([
+                json.dumps({"connect": {"client": "test-client-id"}})
+            ]))
+
+            async with TokenBowlWebSocket(api_key="test-key") as client:
+                await asyncio.sleep(0.1)
+                assert client.connected
+
+            # Should be disconnected after exiting context
+            assert not client.connected
+            mock_websocket.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_mark_message_read(mock_httpx_response):
+    """Test marking a message as read via REST API."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+
+        # Mock response for mark read
+        read_response = MagicMock()
+        read_response.raise_for_status = MagicMock()
+        mock_client.post.return_value = read_response
+
+        mock_client_class.return_value = mock_client
+
+        client = TokenBowlWebSocket(api_key="test-key")
+        await client.mark_as_read("msg-123")
+
+        # Verify REST API call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[0][0].endswith("/messages/msg-123/read")
+
+
+@pytest.mark.asyncio
+async def test_mark_all_as_read(mock_httpx_response):
+    """Test marking all messages as read via REST API."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+
+        # Mock response for mark all read
+        read_response = MagicMock()
+        read_response.raise_for_status = MagicMock()
+        read_response.json.return_value = {"count": 5}
+        mock_client.post.return_value = read_response
+
+        mock_client_class.return_value = mock_client
+
+        client = TokenBowlWebSocket(api_key="test-key")
+        result = await client.mark_all_as_read()
+
+        assert result["count"] == 5
+
+        # Verify REST API call was made
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[0][0].endswith("/messages/mark-all-read")
+
+
+@pytest.mark.asyncio
+async def test_wait_until_connected(mock_websocket, mock_httpx_response):
+    """Test waiting for connection to be established."""
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(api_key="test-key")
+
+            # Simulate delayed connect response
+            async def delayed_messages():
+                yield json.dumps({"connect": {"client": "test-client-id"}})
+
+            mock_websocket.__aiter__ = delayed_messages
+
+            # Start connection in background
+            connect_task = asyncio.create_task(client.connect())
+
+            # Wait for connection
+            await client.wait_until_connected(timeout=5.0)
+            assert client.connected
+
+            await connect_task
+
+
+@pytest.mark.asyncio
+async def test_server_disconnect(mock_websocket, mock_httpx_response):
+    """Test handling server-initiated disconnect."""
+    disconnect_called = []
 
     def on_disconnect():
-        nonlocal on_disconnect_called
-        on_disconnect_called = True
-
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key", on_disconnect=on_disconnect)
-        await client.connect()
-
-        assert client.is_connected
-
-        await client.disconnect()
-
-        assert not client.is_connected
-        assert on_disconnect_called
-        mock_websocket.close.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_context_manager(mock_websocket):
-    """Test using WebSocket as async context manager."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        async with TokenBowlWebSocket(api_key="test-key") as client:
-            assert client.is_connected
-            await client.send_message("test")
-
-        # Should be disconnected after exiting context
-        assert not client.is_connected
-        mock_websocket.close.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_base_url_normalization():
-    """Test that base URL is properly normalized."""
-    # WSS URL without /ws
-    client1 = TokenBowlWebSocket(api_key="key", base_url="wss://example.com")
-    assert client1.base_url == "wss://example.com/ws"
-
-    # WSS URL with trailing slash
-    client2 = TokenBowlWebSocket(api_key="key", base_url="wss://example.com/")
-    assert client2.base_url == "wss://example.com/ws"
-
-    # WSS URL with /ws already
-    client3 = TokenBowlWebSocket(api_key="key", base_url="wss://example.com/ws")
-    assert client3.base_url == "wss://example.com/ws"
-
-
-@pytest.mark.asyncio
-async def test_receive_confirmation_message():
-    """Test that confirmation messages are properly handled and not passed to on_message."""
-    confirmation_data = {
-        "status": "sent",
-        "message": {"id": "123", "content": "test"},
-    }
-
-    messages_received = []
-
-    def on_message(msg: MessageResponse):
-        messages_received.append(msg)
-
-    mock_ws = AsyncMock()
-    mock_ws.send = AsyncMock()
-    mock_ws.close = AsyncMock()
-
-    async def message_generator():
-        yield json.dumps(confirmation_data)
-
-    mock_ws.__aiter__ = lambda self: message_generator()
-
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_ws)):
-        client = TokenBowlWebSocket(api_key="test-key", on_message=on_message)
-        await client.connect()
-
-        await asyncio.sleep(0.1)
-
-        # Confirmation messages should not trigger on_message callback
-        assert len(messages_received) == 0
-
-        await client.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_send_network_error(mock_websocket):
-    """Test handling network error when sending."""
-    mock_websocket.send.side_effect = Exception("Network error")
-
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        with pytest.raises(NetworkError, match="Failed to send"):
-            await client.send_message("test")
-
-
-@pytest.mark.asyncio
-async def test_mark_message_read(mock_websocket):
-    """Test marking a specific message as read."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        await client.mark_message_read("msg123")
-
-        mock_websocket.send.assert_called_once()
-        sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["type"] == "mark_read"
-        assert sent_data["message_id"] == "msg123"
-
-
-@pytest.mark.asyncio
-async def test_mark_all_messages_read(mock_websocket):
-    """Test marking all messages as read."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        await client.mark_all_messages_read()
-
-        mock_websocket.send.assert_called_once()
-        sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["type"] == "mark_all_read"
-
-
-@pytest.mark.asyncio
-async def test_mark_room_messages_read(mock_websocket):
-    """Test marking all room messages as read."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        await client.mark_room_messages_read()
-
-        mock_websocket.send.assert_called_once()
-        sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["type"] == "mark_room_read"
-
-
-@pytest.mark.asyncio
-async def test_mark_direct_messages_read(mock_websocket):
-    """Test marking direct messages from a user as read."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        await client.mark_direct_messages_read("alice")
-
-        mock_websocket.send.assert_called_once()
-        sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["type"] == "mark_direct_read"
-        assert sent_data["from_username"] == "alice"
-
-
-@pytest.mark.asyncio
-async def test_get_unread_count(mock_websocket):
-    """Test requesting unread count."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        await client.get_unread_count()
-
-        mock_websocket.send.assert_called_once()
-        sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["type"] == "get_unread_count"
-
-
-@pytest.mark.asyncio
-async def test_send_typing_indicator_room(mock_websocket):
-    """Test sending typing indicator to room."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        await client.send_typing_indicator()
-
-        mock_websocket.send.assert_called_once()
-        sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["type"] == "typing"
-        assert "to_username" not in sent_data
-
-
-@pytest.mark.asyncio
-async def test_send_typing_indicator_direct(mock_websocket):
-    """Test sending typing indicator to specific user."""
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        await client.send_typing_indicator(to_username="bob")
-
-        mock_websocket.send.assert_called_once()
-        sent_data = json.loads(mock_websocket.send.call_args[0][0])
-        assert sent_data["type"] == "typing"
-        assert sent_data["to_username"] == "bob"
-
-
-@pytest.mark.asyncio
-async def test_receive_read_receipt():
-    """Test receiving a read receipt event."""
-    read_receipt_data = {
-        "type": "read_receipt",
-        "message_id": "msg123",
-        "read_by": "alice",
-    }
-
-    receipts_received = []
-
-    def on_read_receipt(message_id: str, read_by: str):
-        receipts_received.append((message_id, read_by))
-
-    mock_ws = AsyncMock()
-    mock_ws.send = AsyncMock()
-    mock_ws.close = AsyncMock()
-
-    async def message_generator():
-        yield json.dumps(read_receipt_data)
-
-    mock_ws.__aiter__ = lambda self: message_generator()
-
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_ws)):
-        client = TokenBowlWebSocket(api_key="test-key", on_read_receipt=on_read_receipt)
-        await client.connect()
-
-        await asyncio.sleep(0.1)
-
-        assert len(receipts_received) == 1
-        assert receipts_received[0] == ("msg123", "alice")
-
-        await client.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_receive_unread_count():
-    """Test receiving unread count update."""
-    unread_count_data = {
-        "type": "unread_count",
-        "unread_room_messages": 5,
-        "unread_direct_messages": 3,
-        "total_unread": 8,
-    }
-
-    counts_received = []
-
-    def on_unread_count(count):
-        counts_received.append(count)
-
-    mock_ws = AsyncMock()
-    mock_ws.send = AsyncMock()
-    mock_ws.close = AsyncMock()
-
-    async def message_generator():
-        yield json.dumps(unread_count_data)
-
-    mock_ws.__aiter__ = lambda self: message_generator()
-
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_ws)):
-        client = TokenBowlWebSocket(api_key="test-key", on_unread_count=on_unread_count)
-        await client.connect()
-
-        await asyncio.sleep(0.1)
-
-        assert len(counts_received) == 1
-        assert counts_received[0].unread_room_messages == 5
-        assert counts_received[0].unread_direct_messages == 3
-        assert counts_received[0].total_unread == 8
-
-        await client.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_receive_typing_indicator():
-    """Test receiving typing indicator."""
-    typing_data = {"type": "typing", "username": "alice", "to_username": None}
-
-    typing_events = []
-
-    def on_typing(username: str, to_username: str | None):
-        typing_events.append((username, to_username))
-
-    mock_ws = AsyncMock()
-    mock_ws.send = AsyncMock()
-    mock_ws.close = AsyncMock()
-
-    async def message_generator():
-        yield json.dumps(typing_data)
-
-    mock_ws.__aiter__ = lambda self: message_generator()
-
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_ws)):
-        client = TokenBowlWebSocket(api_key="test-key", on_typing=on_typing)
-        await client.connect()
-
-        await asyncio.sleep(0.1)
-
-        assert len(typing_events) == 1
-        assert typing_events[0] == ("alice", None)
-
-        await client.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_receive_typing_indicator_direct():
-    """Test receiving typing indicator for direct message."""
-    typing_data = {"type": "typing", "username": "alice", "to_username": "bob"}
-
-    typing_events = []
-
-    def on_typing(username: str, to_username: str | None):
-        typing_events.append((username, to_username))
-
-    mock_ws = AsyncMock()
-    mock_ws.send = AsyncMock()
-    mock_ws.close = AsyncMock()
-
-    async def message_generator():
-        yield json.dumps(typing_data)
-
-    mock_ws.__aiter__ = lambda self: message_generator()
-
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_ws)):
-        client = TokenBowlWebSocket(api_key="test-key", on_typing=on_typing)
-        await client.connect()
-
-        await asyncio.sleep(0.1)
-
-        assert len(typing_events) == 1
-        assert typing_events[0] == ("alice", "bob")
-
-        await client.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_mark_read_not_connected():
-    """Test marking message read when not connected."""
-    client = TokenBowlWebSocket(api_key="test-key")
-
-    with pytest.raises(ValueError, match="not connected"):
-        await client.mark_message_read("msg123")
-
-
-@pytest.mark.asyncio
-async def test_typing_indicator_not_connected():
-    """Test sending typing indicator when not connected."""
-    client = TokenBowlWebSocket(api_key="test-key")
-
-    with pytest.raises(ValueError, match="not connected"):
-        await client.send_typing_indicator()
-
-
-@pytest.mark.asyncio
-async def test_connect_without_api_key():
-    """Test connecting without API key."""
-    client = TokenBowlWebSocket()
-
-    with pytest.raises(AuthenticationError, match="API key required"):
-        await client.connect()
-
-
-@pytest.mark.asyncio
-async def test_heartbeat_ping_pong():
-    """Test that client responds to server ping with pong."""
-    ping_data = {"type": "ping", "timestamp": "2024-01-20T15:30:45.123456+00:00"}
-
-    mock_ws = AsyncMock()
-    mock_ws.send = AsyncMock()
-    mock_ws.close = AsyncMock()
-
-    async def message_generator():
-        yield json.dumps(ping_data)
-
-    mock_ws.__aiter__ = lambda self: message_generator()
-
-    with patch("websockets.connect", new=AsyncMock(return_value=mock_ws)):
-        client = TokenBowlWebSocket(api_key="test-key")
-        await client.connect()
-
-        # Wait for ping to be processed
-        await asyncio.sleep(0.1)
-
-        # Verify pong was sent
-        mock_ws.send.assert_called()
-        sent_data = json.loads(mock_ws.send.call_args[0][0])
-        assert sent_data["type"] == "pong"
-
-        await client.disconnect()
+        disconnect_called.append(True)
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = mock_httpx_response
+        mock_client_class.return_value = mock_client
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(
+                api_key="test-key",
+                on_disconnect=on_disconnect
+            )
+
+            # Simulate connect and then disconnect
+            messages = [
+                json.dumps({"connect": {"client": "test-client-id"}}),
+                json.dumps({
+                    "disconnect": {
+                        "reason": "shutdown",
+                        "reconnect": False
+                    }
+                })
+            ]
+            mock_websocket.__aiter__ = MagicMock(return_value=iter(messages))
+
+            await client.connect()
+            await asyncio.sleep(0.1)
+
+            assert not client.connected
+            assert len(disconnect_called) == 1

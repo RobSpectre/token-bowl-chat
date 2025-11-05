@@ -1,15 +1,17 @@
 """WebSocket client for real-time Token Bowl Chat messaging using Centrifugo."""
 
 import asyncio
+import json
 import logging
 import os
 from collections.abc import Callable
 from typing import Any
 
-from centrifuge import Client as CentrifugeClient, PublicationContext, SubscribedContext, SubscriptionTokenContext
 import httpx
+import websockets
+from websockets.asyncio.client import ClientConnection
 
-from .exceptions import AuthenticationError, NetworkError
+from .exceptions import AuthenticationError, NetworkError, TimeoutError
 from .models import MessageResponse, UnreadCountResponse
 
 logger = logging.getLogger(__name__)
@@ -77,9 +79,20 @@ class TokenBowlWebSocket:
         self.on_error = on_error
 
         # Connection state
-        self._client: CentrifugeClient | None = None
+        self._websocket: ClientConnection | None = None
         self._connection_info: dict[str, Any] | None = None
         self._connected = False
+        self._connecting = False
+        self._client_id: str | None = None
+        self._subscriptions: set[str] = set()
+
+        # Message tracking
+        self._message_ids: set[str] = set()  # Track received message IDs to prevent duplicates
+        self._command_id = 1  # Command ID counter for Centrifugo protocol
+
+        # Tasks
+        self._receive_task: asyncio.Task | None = None
+        self._ping_task: asyncio.Task | None = None
 
     async def __aenter__(self) -> "TokenBowlWebSocket":
         """Async context manager entry."""
@@ -92,9 +105,14 @@ class TokenBowlWebSocket:
 
     async def connect(self) -> None:
         """Connect to the Centrifugo server."""
+        if self._connecting or self._connected:
+            logger.debug("Already connected or connecting")
+            return
+
         if not self.api_key:
             raise AuthenticationError("API key is required for WebSocket connection")
 
+        self._connecting = True
         try:
             # Get connection token from server
             async with httpx.AsyncClient() as client:
@@ -106,78 +124,235 @@ class TokenBowlWebSocket:
                 response.raise_for_status()
                 self._connection_info = response.json()
 
-            # Create Centrifugo client
-            self._client = CentrifugeClient(
-                self._connection_info["url"],
-                token=self._connection_info["token"],
+            # Connect to Centrifugo WebSocket
+            ws_url = self._connection_info["url"]
+            self._websocket = await websockets.connect(
+                ws_url,
+                subprotocols=["centrifuge-json"],  # Use JSON protocol
             )
 
-            # Set up event handlers
-            async def on_connected(context):
-                self._connected = True
-                logger.info("Connected to Centrifugo")
-                if self.on_connect:
-                    self.on_connect()
+            # Send connection command with token
+            connect_cmd = {
+                "id": self._get_next_command_id(),
+                "connect": {
+                    "token": self._connection_info["token"]
+                }
+            }
+            await self._websocket.send(json.dumps(connect_cmd))
 
-                # Subscribe to channels
-                for channel in self._connection_info["channels"]:
-                    await self._subscribe_channel(channel)
+            # Start receive loop
+            self._receive_task = asyncio.create_task(self._receive_loop())
 
-            async def on_disconnected(context):
-                self._connected = False
-                logger.info("Disconnected from Centrifugo")
-                if self.on_disconnect:
-                    self.on_disconnect()
+            # Start ping task to keep connection alive
+            self._ping_task = asyncio.create_task(self._ping_loop())
 
-            async def on_error_event(error):
-                logger.error(f"Centrifugo error: {error}")
-                if self.on_error:
-                    self.on_error(error)
-
-            self._client.on_connected(on_connected)
-            self._client.on_disconnected(on_disconnected)
-            self._client.on_error(on_error_event)
-
-            # Connect
-            await self._client.connect()
+            logger.info("Connecting to Centrifugo...")
 
         except Exception as e:
+            self._connecting = False
             error_msg = f"Failed to connect to Centrifugo: {e}"
             logger.error(error_msg)
+            if self.on_error:
+                self.on_error(NetworkError(error_msg))
             raise NetworkError(error_msg) from e
 
-    async def _subscribe_channel(self, channel: str) -> None:
-        """Subscribe to a Centrifugo channel.
+    def _get_next_command_id(self) -> int:
+        """Get next command ID for Centrifugo protocol."""
+        cmd_id = self._command_id
+        self._command_id += 1
+        return cmd_id
 
-        Args:
-            channel: Channel name to subscribe to
-        """
-        if not self._client:
+    async def _ping_loop(self) -> None:
+        """Send periodic pings to keep connection alive."""
+        while self._connected:
+            try:
+                await asyncio.sleep(25)  # Ping every 25 seconds
+                if self._websocket and self._connected:
+                    ping_cmd = {
+                        "id": self._get_next_command_id(),
+                        "ping": {}
+                    }
+                    await self._websocket.send(json.dumps(ping_cmd))
+                    logger.debug("Sent ping to Centrifugo")
+            except Exception as e:
+                logger.error(f"Error sending ping: {e}")
+                break
+
+    async def _receive_loop(self) -> None:
+        """Receive and process messages from Centrifugo."""
+        if not self._websocket:
             return
 
-        subscription = self._client.new_subscription(channel)
+        try:
+            async for message in self._websocket:
+                try:
+                    data = json.loads(message)
+                    await self._handle_centrifugo_message(data)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to decode message: {e}")
+                except Exception as e:
+                    logger.error(f"Error handling message: {e}")
+                    if self.on_error:
+                        self.on_error(e)
 
-        async def on_publication(context: PublicationContext):
-            """Handle incoming publication."""
-            try:
-                data = context.data
-                if self.on_message:
-                    # Convert to MessageResponse
-                    message = MessageResponse(**data)
-                    self.on_message(message)
-            except Exception as e:
-                logger.error(f"Error handling publication: {e}")
+        except websockets.exceptions.ConnectionClosed:
+            logger.info("WebSocket connection closed")
+            self._connected = False
+            self._connecting = False
+            if self.on_disconnect:
+                self.on_disconnect()
+        except Exception as e:
+            logger.error(f"Error in receive loop: {e}")
+            self._connected = False
+            self._connecting = False
+            if self.on_error:
+                self.on_error(e)
+            if self.on_disconnect:
+                self.on_disconnect()
 
-        subscription.on_publication(on_publication)
-        await subscription.subscribe()
-        logger.info(f"Subscribed to channel: {channel}")
+    async def _handle_centrifugo_message(self, data: dict[str, Any]) -> None:
+        """Handle Centrifugo protocol messages."""
+
+        # Handle connect response
+        if "connect" in data:
+            result = data["connect"]
+            self._client_id = result.get("client")
+            self._connected = True
+            self._connecting = False
+
+            # Subscribe to channels after successful connection
+            await self._subscribe_to_channels()
+
+            if self.on_connect:
+                self.on_connect()
+            logger.info(f"Connected to Centrifugo with client ID: {self._client_id}")
+
+        # Handle subscribe response
+        elif "subscribe" in data:
+            channel = data["subscribe"].get("channel")
+            if channel:
+                self._subscriptions.add(channel)
+                logger.info(f"Subscribed to channel: {channel}")
+
+                # Handle any recovered messages
+                if "publications" in data["subscribe"]:
+                    for pub in data["subscribe"]["publications"]:
+                        await self._handle_publication(pub, channel)
+
+        # Handle publication (incoming message)
+        elif "push" in data and "pub" in data["push"]:
+            pub = data["push"]["pub"]
+            channel = data["push"].get("channel", "")
+            await self._handle_publication(pub, channel)
+
+        # Handle unsubscribe
+        elif "unsubscribe" in data:
+            channel = data["unsubscribe"].get("channel")
+            if channel and channel in self._subscriptions:
+                self._subscriptions.discard(channel)
+                logger.info(f"Unsubscribed from channel: {channel}")
+
+        # Handle disconnect
+        elif "disconnect" in data:
+            disconnect_data = data["disconnect"]
+            reason = disconnect_data.get("reason", "unknown")
+            reconnect = disconnect_data.get("reconnect", True)
+            logger.warning(f"Server requested disconnect: {reason}, reconnect: {reconnect}")
+
+            self._connected = False
+            self._connecting = False
+
+            if self.on_disconnect:
+                self.on_disconnect()
+
+        # Handle error
+        elif "error" in data:
+            error = data["error"]
+            code = error.get("code")
+            message = error.get("message", "Unknown error")
+            logger.error(f"Centrifugo error {code}: {message}")
+            if self.on_error:
+                self.on_error(Exception(f"Centrifugo error {code}: {message}"))
+
+        # Handle ping response (pong)
+        elif "pong" in data:
+            logger.debug("Received pong from Centrifugo")
+
+    async def _handle_publication(self, pub: dict[str, Any], channel: str) -> None:
+        """Handle a publication (message) from Centrifugo."""
+        message_data = pub.get("data")
+        if not message_data:
+            return
+
+        try:
+            # Check for duplicate messages
+            message_id = message_data.get("id")
+            if message_id and message_id in self._message_ids:
+                logger.debug(f"Ignoring duplicate message: {message_id}")
+                return
+
+            if message_id:
+                self._message_ids.add(message_id)
+                # Keep only last 1000 message IDs to prevent memory growth
+                if len(self._message_ids) > 1000:
+                    self._message_ids = set(list(self._message_ids)[-1000:])
+
+            # Convert to MessageResponse and call handler
+            if self.on_message:
+                message = MessageResponse(**message_data)
+                self.on_message(message)
+                logger.debug(f"Processed message from {message.from_username} on channel {channel}")
+
+        except Exception as e:
+            logger.error(f"Error processing publication: {e}")
+
+    async def _subscribe_to_channels(self) -> None:
+        """Subscribe to authorized channels."""
+        if not self._websocket or not self._connection_info:
+            return
+
+        # Subscribe to each channel from connection info
+        for channel in self._connection_info.get("channels", []):
+            if channel not in self._subscriptions:
+                subscribe_cmd = {
+                    "id": self._get_next_command_id(),
+                    "subscribe": {
+                        "channel": channel,
+                        "recover": True,  # Enable message recovery
+                    }
+                }
+                await self._websocket.send(json.dumps(subscribe_cmd))
+                logger.debug(f"Subscribing to channel: {channel}")
 
     async def disconnect(self) -> None:
         """Disconnect from the server."""
-        if self._client:
-            await self._client.disconnect()
-            self._client = None
-            self._connected = False
+        self._connected = False
+        self._connecting = False
+
+        # Cancel tasks
+        if self._receive_task:
+            self._receive_task.cancel()
+            try:
+                await self._receive_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._ping_task:
+            self._ping_task.cancel()
+            try:
+                await self._ping_task
+            except asyncio.CancelledError:
+                pass
+
+        # Close WebSocket
+        if self._websocket:
+            await self._websocket.close()
+            self._websocket = None
+
+        self._subscriptions.clear()
+        self._message_ids.clear()
+        self._client_id = None
+        self._command_id = 1
 
     async def send_message(
         self, content: str, to_username: str | None = None, **_kwargs: Any
@@ -205,7 +380,7 @@ class TokenBowlWebSocket:
                     timeout=10.0,
                 )
                 response.raise_for_status()
-                logger.debug(f"Sent message via REST API")
+                logger.debug("Sent message via REST API")
 
         except Exception as e:
             error_msg = f"Failed to send message: {e}"
@@ -280,3 +455,35 @@ class TokenBowlWebSocket:
             if asyncio.get_event_loop().time() - start_time > timeout:
                 raise TimeoutError("Connection timeout")
             await asyncio.sleep(0.1)
+
+    # Backward compatibility methods (these operations are not supported via WebSocket in Centrifugo)
+    async def mark_message_read(self, message_id: str) -> None:
+        """Mark a message as read (backward compatibility alias)."""
+        await self.mark_as_read(message_id)
+
+    async def mark_all_messages_read(self) -> None:
+        """Mark all messages as read (backward compatibility alias)."""
+        await self.mark_all_as_read()
+
+    async def mark_room_messages_read(self) -> None:
+        """Mark all room messages as read (not supported in Centrifugo mode)."""
+        logger.debug("mark_room_messages_read not supported via WebSocket in Centrifugo mode")
+        # Could implement via REST API if needed
+
+    async def mark_direct_messages_read(self, from_username: str) -> None:
+        """Mark all direct messages from a user as read (not supported in Centrifugo mode)."""
+        logger.debug("mark_direct_messages_read not supported via WebSocket in Centrifugo mode")
+        # Could implement via REST API if needed
+
+    async def send_typing_indicator(self, to_username: str | None = None) -> None:
+        """Send typing indicator (not supported in Centrifugo mode)."""
+        logger.debug("Typing indicators not supported in Centrifugo mode")
+
+    async def get_unread_count(self) -> None:
+        """Request unread count update (not supported via WebSocket in Centrifugo mode)."""
+        logger.debug("Unread count via WebSocket not supported in Centrifugo mode")
+
+    @property
+    def is_connected(self) -> bool:
+        """Check if WebSocket is currently connected (backward compatibility)."""
+        return self._connected
