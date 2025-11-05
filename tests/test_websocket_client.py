@@ -611,8 +611,10 @@ async def test_ping_pong_handling(mock_websocket, mock_httpx_response):
 
         # Track messages sent by client
         sent_messages = []
+
         async def track_send(msg):
             sent_messages.append(json.loads(msg))
+
         mock_websocket.send = track_send
 
         # Simulate connect and then server ping (empty JSON)
@@ -629,6 +631,6 @@ async def test_ping_pong_handling(mock_websocket, mock_httpx_response):
 
             # Check that we responded with empty {} as pong
             pong_sent = any(msg == {} for msg in sent_messages)
-            assert pong_sent, f"Expected empty {{}} pong response to server ping, sent: {sent_messages}"
-
-
+            assert pong_sent, (
+                f"Expected empty {{}} pong response to server ping, sent: {sent_messages}"
+            )

@@ -162,7 +162,6 @@ class TokenBowlWebSocket:
         self._command_id += 1
         return cmd_id
 
-
     async def _receive_loop(self) -> None:
         """Receive and process messages from Centrifugo."""
         if not self._websocket:
@@ -203,7 +202,7 @@ class TokenBowlWebSocket:
         # Handle empty message (ping from server) - must respond with pong
         if not data or len(data) == 0:
             # Server sent {} as ping, respond with {} as pong
-            pong_response = {}
+            pong_response: dict[str, Any] = {}
             if self._websocket:
                 await self._websocket.send(json.dumps(pong_response))
                 logger.debug("Received ping (empty JSON), sent pong")
@@ -282,14 +281,17 @@ class TokenBowlWebSocket:
                 if match:
                     channel = match.group(1)
                     self._subscriptions.add(channel)
-                    logger.debug(f"Already subscribed to {channel} (expected on reconnect)")
+                    logger.debug(
+                        f"Already subscribed to {channel} (expected on reconnect)"
+                    )
                 else:
-                    logger.debug(f"Already subscribed (expected on reconnect): {message}")
+                    logger.debug(
+                        f"Already subscribed (expected on reconnect): {message}"
+                    )
             else:
                 logger.error(f"Centrifugo error {code}: {message}")
                 if self.on_error:
                     self.on_error(Exception(f"Centrifugo error {code}: {message}"))
-
 
     async def _handle_publication(self, pub: dict[str, Any], channel: str) -> None:
         """Handle a publication (message or event) from Centrifugo."""
@@ -394,7 +396,6 @@ class TokenBowlWebSocket:
             self._receive_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._receive_task
-
 
         # Close WebSocket
         if self._websocket:
