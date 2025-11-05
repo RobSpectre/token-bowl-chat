@@ -615,10 +615,10 @@ async def test_ping_pong_handling(mock_websocket, mock_httpx_response):
             sent_messages.append(json.loads(msg))
         mock_websocket.send = track_send
 
-        # Simulate connect and then server ping
+        # Simulate connect and then server ping (empty JSON)
         messages = [
             json.dumps({"connect": {"client": "test-client-id"}}),
-            json.dumps({"ping": {}}),  # Server sends ping
+            json.dumps({}),  # Server sends empty {} as ping
         ]
         mock_websocket.__aiter__ = MagicMock(return_value=AsyncIteratorMock(messages))
 
@@ -627,38 +627,8 @@ async def test_ping_pong_handling(mock_websocket, mock_httpx_response):
             await client.connect()
             await asyncio.sleep(0.1)
 
-            # Check that we responded with pong
-            pong_sent = any("pong" in msg for msg in sent_messages)
-            assert pong_sent, f"Expected pong response to server ping, sent: {sent_messages}"
+            # Check that we responded with empty {} as pong
+            pong_sent = any(msg == {} for msg in sent_messages)
+            assert pong_sent, f"Expected empty {{}} pong response to server ping, sent: {sent_messages}"
 
 
-@pytest.mark.asyncio
-async def test_ping_push_handling(mock_websocket, mock_httpx_response):
-    """Test handling ping as push message from server."""
-    with patch("httpx.AsyncClient") as mock_client_class:
-        mock_client = AsyncMock()
-        mock_client.__aenter__.return_value = mock_client
-        mock_client.get.return_value = mock_httpx_response
-        mock_client_class.return_value = mock_client
-
-        # Track messages sent by client
-        sent_messages = []
-        async def track_send(msg):
-            sent_messages.append(json.loads(msg))
-        mock_websocket.send = track_send
-
-        # Simulate connect and then server ping as push
-        messages = [
-            json.dumps({"connect": {"client": "test-client-id"}}),
-            json.dumps({"push": {"ping": {}}}),  # Server sends ping as push
-        ]
-        mock_websocket.__aiter__ = MagicMock(return_value=AsyncIteratorMock(messages))
-
-        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
-            client = TokenBowlWebSocket(api_key="test-key")
-            await client.connect()
-            await asyncio.sleep(0.1)
-
-            # Check that we responded with pong
-            pong_sent = any("pong" in msg for msg in sent_messages)
-            assert pong_sent, f"Expected pong response to server ping push, sent: {sent_messages}"

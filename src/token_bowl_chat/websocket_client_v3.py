@@ -97,7 +97,6 @@ class TokenBowlWebSocket:
 
         # Tasks
         self._receive_task: asyncio.Task | None = None
-        self._ping_task: asyncio.Task | None = None
 
     async def __aenter__(self) -> "TokenBowlWebSocket":
         """Async context manager entry."""
@@ -144,8 +143,8 @@ class TokenBowlWebSocket:
             # Start receive loop
             self._receive_task = asyncio.create_task(self._receive_loop())
 
-            # Start ping task to keep connection alive
-            self._ping_task = asyncio.create_task(self._ping_loop())
+            # Note: In Centrifugo v4+, ping/pong is server-initiated
+            # We don't need a client ping loop, just respond to server pings
 
             logger.info("Connecting to Centrifugo...")
 
@@ -163,25 +162,6 @@ class TokenBowlWebSocket:
         self._command_id += 1
         return cmd_id
 
-    async def _ping_loop(self) -> None:
-        """Send periodic pings to keep connection alive.
-
-        Note: Centrifugo server also sends pings to us (default every 25s).
-        We respond to those with pongs. This client-side ping is additional
-        and helps detect connection issues from our side.
-        """
-        while self._connected:
-            try:
-                # Send client ping every 20 seconds (before server's 25s interval)
-                # This helps us detect connection issues faster
-                await asyncio.sleep(20)
-                if self._websocket and self._connected:
-                    ping_cmd = {"id": self._get_next_command_id(), "ping": {}}
-                    await self._websocket.send(json.dumps(ping_cmd))
-                    logger.debug("Sent client ping to Centrifugo")
-            except Exception as e:
-                logger.error(f"Error sending ping: {e}")
-                break
 
     async def _receive_loop(self) -> None:
         """Receive and process messages from Centrifugo."""
@@ -220,18 +200,18 @@ class TokenBowlWebSocket:
     async def _handle_centrifugo_message(self, data: dict[str, Any]) -> None:
         """Handle Centrifugo protocol messages."""
 
-        # Handle push messages first (they may contain ping)
-        if "push" in data:
-            push_data = data["push"]
+        # Handle empty message (ping from server) - must respond with pong
+        if not data or len(data) == 0:
+            # Server sent {} as ping, respond with {} as pong
+            pong_response = {}
+            if self._websocket:
+                await self._websocket.send(json.dumps(pong_response))
+                logger.debug("Received ping (empty JSON), sent pong")
+            return
 
-            # Check if it's a ping push
-            if "ping" in push_data:
-                # Server is pinging us, respond immediately
-                pong_response = {"pong": {}}
-                if self._websocket:
-                    await self._websocket.send(json.dumps(pong_response))
-                    logger.debug("Received ping push, sent pong")
-                return
+        # Handle push messages
+        elif "push" in data:
+            push_data = data["push"]
 
             # Check if it's a publication
             if "pub" in push_data:
@@ -310,17 +290,6 @@ class TokenBowlWebSocket:
                 if self.on_error:
                     self.on_error(Exception(f"Centrifugo error {code}: {message}"))
 
-        # Handle incoming ping from server - must respond with pong
-        elif "ping" in data:
-            # Server is pinging us, we must respond with pong immediately
-            pong_response = {"pong": {}}
-            if self._websocket:
-                await self._websocket.send(json.dumps(pong_response))
-                logger.debug("Received ping from Centrifugo, sent pong")
-
-        # Handle ping response (pong) - response to our ping
-        elif "pong" in data:
-            logger.debug("Received pong from Centrifugo (response to our ping)")
 
     async def _handle_publication(self, pub: dict[str, Any], channel: str) -> None:
         """Handle a publication (message or event) from Centrifugo."""
@@ -426,10 +395,6 @@ class TokenBowlWebSocket:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._receive_task
 
-        if self._ping_task:
-            self._ping_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._ping_task
 
         # Close WebSocket
         if self._websocket:
