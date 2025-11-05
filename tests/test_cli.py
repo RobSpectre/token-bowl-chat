@@ -7,12 +7,18 @@ These tests verify:
 4. Entry points are properly configured
 """
 
+import shutil
 import subprocess
 
 import pytest
 from typer.testing import CliRunner
 
 from token_bowl_chat.cli import app, main
+
+
+def command_exists(command):
+    """Check if a command exists in PATH."""
+    return shutil.which(command) is not None
 
 
 @pytest.fixture
@@ -166,6 +172,7 @@ def test_live_monitor_command_exists(runner):
     assert "Monitor messages in real-time" in result.stdout
 
 
+@pytest.mark.skipif(not command_exists("token-bowl"), reason="token-bowl command not in PATH")
 def test_token_bowl_entry_point():
     """Test that token-bowl entry point is installed."""
     result = subprocess.run(
@@ -178,6 +185,7 @@ def test_token_bowl_entry_point():
     assert "Token Bowl Chat CLI" in result.stdout
 
 
+@pytest.mark.skipif(not command_exists("token-bowl-chat"), reason="token-bowl-chat command not in PATH")
 def test_token_bowl_chat_entry_point():
     """Test that token-bowl-chat entry point is installed."""
     result = subprocess.run(
