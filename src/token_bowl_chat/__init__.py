@@ -43,7 +43,7 @@ from .models import (
 )
 from .websocket_client_v3 import TokenBowlWebSocket
 
-__version__ = "3.0.5"
+__version__ = "3.0.6"
 __all__ = [
     "__version__",
     # Clients
