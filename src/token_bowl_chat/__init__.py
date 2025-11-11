@@ -1,6 +1,5 @@
 """Token Bowl Chat Client - A chat client for Token Bowl."""
 
-from .agent import TokenBowlAgent
 from .async_client import AsyncTokenBowlClient
 from .client import TokenBowlClient
 from .exceptions import (
@@ -43,14 +42,13 @@ from .models import (
 )
 from .websocket_client_v3 import TokenBowlWebSocket
 
-__version__ = "3.0.6"
+__version__ = "4.0.0"
 __all__ = [
     "__version__",
     # Clients
     "TokenBowlClient",
     "AsyncTokenBowlClient",
     "TokenBowlWebSocket",
-    "TokenBowlAgent",
     # Models
     "MessageResponse",
     "MessageType",
