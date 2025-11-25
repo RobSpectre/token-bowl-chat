@@ -89,8 +89,9 @@ async def test_connect_success(mock_websocket, mock_httpx_response):
 
 
 @pytest.mark.asyncio
-async def test_connect_no_api_key():
+async def test_connect_no_api_key(monkeypatch):
     """Test WebSocket connection without API key."""
+    monkeypatch.delenv("TOKEN_BOWL_CHAT_API_KEY", raising=False)
     client = TokenBowlWebSocket()
     with pytest.raises(AuthenticationError, match="API key is required"):
         await client.connect()
@@ -633,4 +634,63 @@ async def test_ping_pong_handling(mock_websocket, mock_httpx_response):
             pong_sent = any(msg == {} for msg in sent_messages)
             assert pong_sent, (
                 f"Expected empty {{}} pong response to server ping, sent: {sent_messages}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_ndjson_multiple_messages_in_single_frame():
+    """Test that newline-delimited JSON (NDJSON) is handled correctly.
+
+    Centrifugo may send multiple JSON objects in a single WebSocket frame,
+    separated by newlines. Each should be processed independently.
+    """
+    mock_websocket = AsyncMock()
+    mock_websocket.close = AsyncMock()
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock()
+    mock_client.get = AsyncMock()
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "url": "ws://localhost:8001/connection/websocket",
+        "token": "test-jwt-token",
+        "channels": ["room:main"],
+        "user": "testuser",
+    }
+    mock_response.raise_for_status = MagicMock()
+    mock_client.get.return_value = mock_response
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client_class.return_value = mock_client
+
+        # Track messages sent by client
+        sent_messages = []
+
+        async def track_send(msg):
+            sent_messages.append(json.loads(msg))
+
+        mock_websocket.send = track_send
+
+        # Single WebSocket frame with multiple NDJSON messages:
+        # connect response and a ping (empty JSON) in one frame
+        ndjson_frame = (
+            json.dumps({"connect": {"client": "test-client-id"}})
+            + "\n"
+            + json.dumps({})  # ping
+        )
+        messages = [ndjson_frame]
+        mock_websocket.__aiter__ = MagicMock(return_value=AsyncIteratorMock(messages))
+
+        with patch("websockets.connect", new=AsyncMock(return_value=mock_websocket)):
+            client = TokenBowlWebSocket(api_key="test-key")
+            await client.connect()
+            await asyncio.sleep(0.1)
+
+            # Both messages should have been processed
+            # The empty {} ping should have triggered a pong response
+            pong_sent = any(msg == {} for msg in sent_messages)
+            assert pong_sent, (
+                f"Expected pong response after processing NDJSON frame, sent: {sent_messages}"
             )

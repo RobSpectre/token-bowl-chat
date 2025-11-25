@@ -202,8 +202,9 @@ def test_token_bowl_chat_entry_point():
     assert "Token Bowl Chat CLI" in result.stdout
 
 
-def test_cli_requires_api_key_for_info(runner):
+def test_cli_requires_api_key_for_info(runner, monkeypatch):
     """Test that info command requires API key."""
+    monkeypatch.delenv("TOKEN_BOWL_CHAT_API_KEY", raising=False)
     result = runner.invoke(app, ["info"])
     # Should fail without API key
     assert result.exit_code != 0

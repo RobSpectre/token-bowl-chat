@@ -169,15 +169,22 @@ class TokenBowlWebSocket:
 
         try:
             async for message in self._websocket:
-                try:
-                    data = json.loads(message)
-                    await self._handle_centrifugo_message(data)
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to decode message: {e}")
-                except Exception as e:
-                    logger.error(f"Error handling message: {e}")
-                    if self.on_error:
-                        self.on_error(e)
+                # Centrifugo sends newline-delimited JSON (NDJSON)
+                # Each line is a separate JSON object
+                text = message if isinstance(message, str) else message.decode("utf-8")
+                for line in text.split("\n"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        await self._handle_centrifugo_message(data)
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to decode message: {e}")
+                    except Exception as e:
+                        logger.error(f"Error handling message: {e}")
+                        if self.on_error:
+                            self.on_error(e)
 
         except websockets.exceptions.ConnectionClosed:
             logger.info("WebSocket connection closed")

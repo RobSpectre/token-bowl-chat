@@ -40,9 +40,9 @@ from .models import (
     UserRegistration,
     UserRegistrationResponse,
 )
-from .websocket_client_v3 import TokenBowlWebSocket
+from .websocket_client import TokenBowlWebSocket
 
-__version__ = "4.0.1"
+__version__ = "4.0.2"
 __all__ = [
     "__version__",
     # Clients
